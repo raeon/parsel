@@ -11,9 +11,7 @@ do
     end
 
     local function pop(tbl)
-        local v = tbl[#tbl]
-        tbl[#tbl] = nil
-        return v
+        return table.remove(tbl, #tbl)
     end
 
     local function peek(tbl)
@@ -31,10 +29,6 @@ do
             end
         end
         return t
-    end
-
-    local function each(tbl, fn)
-        for k,v in pairs(tbl) do fn(k,v) end
     end
 
     local function filter(tbl, fn, usePush)
@@ -79,48 +73,6 @@ do
             end
         end
     end
-
-    local function min(tbl, fn)
-        local minValue, minScore = nil, nil
-        for k,v in pairs(tbl) do
-            if not minScore then
-                minValue = v
-                minScore = fn(k, v)
-            else
-                local score = fn(k, v)
-                if score < minScore then
-                    minValue = v
-                    minScore = score
-                end
-            end
-        end
-        return minValue
-    end
-
-    local function max(tbl, fn)
-        local maxValue, maxScore = nil, nil
-        for k,v in pairs(tbl) do
-            if not maxScore then
-                maxValue = v
-                maxScore = fn(k, v)
-            else
-                local score = fn(k, v)
-                if score < maxScore then
-                    maxValue = v
-                    maxScore = score
-                end
-            end
-        end
-        return maxValue
-    end
-
-    local uid = (function()
-        local id = 1
-        return function()
-            id = id + 1
-            return id - 1
-        end
-    end)()
 
     local function format(fmt, ...)
         local args = {...}
@@ -231,7 +183,6 @@ do
     local Item = {}
 
     function Rule:new(name, symbols)
-        self.id = uid()
         self.name = name
         self.symbols = symbols
     end
@@ -277,10 +228,6 @@ do
         return self.rule.symbols[self.index]
     end
 
-    function Item:expected()
-        return self.rule.symbols[self.index + 1]
-    end
-
     function Item:next(token)
         assert(not self.right, 'attempt to move item to next but already has next')
         assert(not self:isLast(), 'attempt to call next on already final item')
@@ -291,7 +238,23 @@ do
         return next
     end
 
-    function Item:finish()
+    function Item:finish(set)
+        -- Collect the data of this item
+        local data = self:collect()
+
+        -- Resolve all wantedBy's into the curent (given) set
+        for _, position in pairs(self.wantedBy) do
+            local fromItem = position.item
+            --print('wanted by: ' .. tostring(fromItem) .. ' from set ' .. tostring(position.set.index))
+            local nextItem = fromItem:next(data)
+
+            if not contains(set.items, nextItem) then
+                push(set.items, nextItem)
+            end
+        end
+    end
+
+    function Item:collect()
         -- Collect the data in all previous items and return it.
         local data = {}
         local current = self
@@ -310,11 +273,6 @@ do
     end
 
     function Item:__eq(other)
-        -- print('Item:__eq')
-        -- indent()
-        -- print(self)
-        -- print(other)
-        -- outdent()
         if is(other, Item) then
             return self.rule == other.rule
                 and self.index == other.index
@@ -335,17 +293,78 @@ do
 
     local Set = {}
 
-    function Set:new(index, items)
+    function Set:new(index, items, left)
         self.index = index
         self.items = {}
+        self.left = left
+        self.right = nil
 
         for _, item in pairs(items or {}) do
             push(self.items, item)
         end
     end
 
-    function Set:process()
+    function Set:process(grammar, token)
+        -- Here we handle all items in this set.
+        for _, item in pairs(self.items) do
 
+            -- Determine what the next symbol is that this item expects
+            local symbol = item:symbol()
+
+            if not symbol then
+                -- COMPLETION
+                -- If no symbol is expected, we instruct the item to resolve
+                -- all wantedBy's and put those resolved items in this set.
+                item:finish(self)
+            elseif type(symbol) == 'string' then
+                -- PREDICTION
+                -- If the symbol is a string, then it is a *rule*.
+                -- We expand these rules into this given set.
+                self:predict(grammar, item, symbol)
+            else
+                -- SCAN
+                -- The only remaining scenario is that this is a literal or pattern.
+                -- We match this against the current token.
+                if token and token.type == symbol then
+                    -- If this was expected, we add the resulting item
+                    -- to the next set with a reference to this set.
+                    push(self:next().items, item:next(token))
+                end
+            end
+        end
+
+        -- Return the next set. Only created if we did a successful scan.
+        return self.right
+    end
+
+    function Set:predict(grammar, item, symbol)
+        for _, rule in pairs(grammar.rules[symbol]) do
+            -- Create the first item for this rule, or grab an already
+            -- existing item of the same type if it exists within this set.
+            local newItem = rule:item()
+            newItem.set = self.index
+            local duplicate = contains(self.items, newItem)
+
+            -- Add the item if it wasn't a duplicate
+            if not duplicate then
+                push(self.items, newItem)
+            end
+
+            -- Add the wantedBy to whichever item we're using
+            push(duplicate and duplicate.wantedBy or newItem.wantedBy, {
+                set = self,
+                item = item,
+            })
+        end
+    end
+
+    function Set:next()
+        local next = self.right
+        if not next then
+            next = Set(self.index + 1, {}, self)
+            self.right = next
+        end
+        return next
     end
 
     function Set:__tostring()
@@ -370,7 +389,7 @@ do
         self.index = index
         self.opts = opts or {}
 
-        self.terminals = grammar:findTerminals()
+        self.terminals = grammar.terminals
         self.current = nil
     end
 
@@ -431,6 +450,42 @@ do
         return bestToken
     end
 
+    function Lexer:line()
+        local row = self:stats()
+        local input = self.input .. '\n'
+
+        local count = 1
+        local result = ''
+        input:gsub('(.-)\n', function(match)
+            if count == row then
+                result = match
+            end
+            count = count + 1
+        end)
+
+        return result
+    end
+
+    function Lexer:stats()
+        -- Everything we have visited
+        local seen = self.input:gsub(1, self.index - 1)
+
+        -- From the begin of the input to the current index,
+        -- how many newlines are encountered?
+        local row = 1
+        seen:gsub('\n', function() row = row + 1 end)
+
+        -- What character are we at?
+        local last = seen:find('\n[^\n]*$') or 0
+        local col = self.index - last
+
+        return row, col
+    end
+
+    function Lexer:isDone()
+        return self.index > #self.input
+    end
+
     class(Lexer)
 
     --[[
@@ -450,140 +505,54 @@ do
     function Parser:__call(input, index, opts)
         index = index or 1
 
-        -- The sets and our index therein
-        local sets = { Set(1, self.start) }
         local lexer = Lexer(self.grammar, input, index, opts)
+        local set = Set(1, self.start)
+        local token = lexer:peek()
 
-        -- Looping over the sets
-        for setIndex, set in pairs(sets) do
-            print('Current set: ' .. setIndex)
-            indent()
+        -- Loop until we either run out of sets or tokens
+        while set and token do
+            -- Grab the next token
+            token = lexer:next()
 
-            -- Looping over the items in this set
-            for _, item in pairs(set.items) do
+            -- Process the current set
+            local next = set:process(self.grammar, token)
 
-                print('Current item: ' .. tostring(item))
-                indent()
-
-                -- We look at the next symbol.
-                local symbol = item:symbol()
-
-                print('Current symbol: ' .. tostring(symbol))
-
-                -- ..and start with prediction.
-                if symbol and not (is(symbol, Literal) or is(symbol, Pattern)) then
-                    -- NONTERMINAL: PREDICTION!
-                    print('PREDICTION')
-
-                    -- Add the first items of the rules to the current set.
-                    local rules = self.grammar:findRules(symbol)
-                    assert(#rules > 0, 'encountered unknown nonterminal symbol: ' .. symbol)
-                    for _, rule in pairs(rules) do
-                        -- Grab a new unparsed item for this rule
-                        local newItem = rule:item()
-                        newItem.set = set.index
-                        print(tostring(item) .. ' wants ' .. tostring(newItem))
-
-                        -- If this item isn't in this set yet, we add it
-                        -- with a reference back to the current set.
-                        local duplicate = contains(set.items, newItem)
-                        if not duplicate then
-                            push(set.items, newItem)
-                            push(newItem.wantedBy, {
-                                set = set,
-                                item = item
-                            })
-                        else
-                            print('.. which is a DUPLICATE!\n')
-                            push(duplicate.wantedBy, {
-                                set = set,
-                                item = item,
-                            })
-                        end
-                    end
-                elseif symbol then
-                    -- TERMINAL: SCAN!
-                    print('SCAN')
-
-                    -- We peek at the next token and check if it's equal
-                    -- to the currently expected symbol.
-                    local token = lexer:peek()
-                    print('token: ' .. tostring(token))
-                    if token and token.type == symbol then
-                        -- If this was expected, we add the resulting item
-                        -- to the next set with a reference to this set.
-                        local nextSet = sets[setIndex + 1]
-                        if not nextSet then
-                            nextSet = Set(setIndex + 1)
-                            sets[setIndex + 1] = nextSet
-                        end
-
-                        local nextItem = item:next(token)
-                        push(nextSet.items, nextItem)
-                    end
-                else
-                    -- NO SYMBOL: COMPLETION!
-                    print('COMPLETION')
-
-                    -- -- Now we iterate over all items in the previous set
-                    -- -- that are waiting for this symbol to be resolved.
-                    -- local prevSet = sets[item.set]
-                    -- print('Going back to set: ' .. item.set)
-                    -- indent()
-                    -- local data = item:finish()
-                    -- for _, prevItem in pairs(prevSet.items) do
-                    --     -- If the previous item expected this symbol,
-                    --     -- we move them ahead!
-                    --     print('prevItem:', prevItem)
-                    --     local expectedSymbol = prevItem:symbol()
-                    --     print('Item expects: ' .. tostring(expectedSymbol))
-                    --     print('We are: ' .. item.rule.name)
-                    --     if expectedSymbol == item.rule.name then
-                    --         -- We can move this item to next!
-                    --         push(set.items, prevItem:next(data))
-                    --     end
-                    -- end
-                    -- outdent()
-
-                    local data = item:finish()
-
-                    -- Check all wantedBy's
-                    for _, position in pairs(item.wantedBy) do
-                        local fromItem = position.item
-                        print('wanted by: ' .. tostring(fromItem) .. ' from set ' .. tostring(position.set.index))
-                        local nextItem = fromItem:next(data)
-
-                        if not contains(set.items, nextItem) then
-                            push(set.items, nextItem)
-                        end
-                    end
-                end
-
-                outdent()
+            -- If there is no next set, break.
+            if not next then
+                break
             end
-            print('end of item loop')
 
-            lexer:next()
-
-            outdent()
-        end
-        print('end of set loop')
-
-        for _, set in pairs(sets) do
-            print(tostring(set) .. '\n')
+            -- Move to the next set and token.
+            set = next
         end
 
         -- Find all items in the last set that begin at 1
         local results = {}
-        local lastSet = peek(sets)
-        for _, item in pairs(lastSet.items) do
+        for _, item in pairs(set.items) do
             if item.set == 1
             and item.rule.name == self.root
             and item:isLast() then
-                push(results, item:finish())
+                push(results, item:collect())
             end
         end
+
+        -- If there are no results, then we must have either
+        -- reached EOF or an unexpected token. Throw an error.
+        if #results == 0 then
+            return nil, self:error(lexer:isDone()
+                and 'unexpected end of file'
+                or 'unrecognized character', lexer)
+        end
+
         return results
+    end
+
+    function Parser:error(message, lexer)
+        local row, col = lexer:stats()
+        local err = 'Error: ' .. message .. ' at line ' .. row .. ' col ' .. col .. ':\n\n'
+        err = err .. '    ' .. lexer:line() .. '\n'
+        err = err .. '    ' .. string.rep(' ', col - 1) .. '^\n'
+        return err
     end
 
     class(Parser)
@@ -595,45 +564,43 @@ do
     local Grammar = {}
 
     function Grammar:new()
-        self.rules = {}
-        self.ignores = {}
+        self.rules = setmetatable({}, {
+            __index = function(tbl, k)
+                local v = {}
+                rawset(tbl, k, v)
+                return v
+            end
+        })
+        self.terminals = {}
     end
 
     function Grammar:define(result, ...)
         local symbols = {...}
         assert(#symbols > 0, 'rules must have at least 1 symbol')
-        push(self.rules, Rule(result, symbols))
+
+        -- Add the rule to self.rules[result]
+        push(self.rules[result], Rule(result, symbols))
+
+        -- Store any new terminals
+        for _, symbol in pairs(symbols) do
+            if is(symbol, Literal) or is(symbol, Pattern) then
+                if not contains(self.terminals, symbol) then
+                    push(self.terminals, symbol)
+                end
+            end
+        end
     end
 
     function Grammar:ignore(terminal)
         assert(is(terminal, Literal) or is(terminal, Pattern), 'can only ignore terminal symbols')
         terminal.priority = -1
-        push(self.ignores, terminal)
+        push(self.terminals, terminal)
     end
 
     function Grammar:parser(name)
-        local matches = self:findRules(name)
+        local matches = self.rules[name] or {}
         assert(#matches > 0, 'could not find rule: ' .. name)
         return Parser(self, name, matches)
-    end
-
-    function Grammar:findRules(name)
-        return filter(self.rules, function(_, rule) return rule.name == name end, true)
-    end
-
-    function Grammar:findTerminals()
-        local terminals = {}
-        for _, rule in pairs(self.rules) do
-            for _, symbol in pairs(rule.symbols) do
-                if is(symbol, Literal) or is(symbol, Pattern) then
-                    push(terminals, symbol)
-                end
-            end
-        end
-        for _, terminal in pairs(self.ignores) do
-            push(terminals, terminal)
-        end
-        return terminals
     end
 
     class(Grammar)
