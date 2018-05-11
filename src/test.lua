@@ -101,14 +101,37 @@ g:define('primary', 'boolean')
 g:define('primary', 'nil')
 g:define('primary', 'closed')
 
+-- node.text => concatenated string
+-- node.strip(type) => find all subnodes with type
+-- node.transform(type, func) => call func for each node of the given type
+-- node.reduce(type) => removes all nodes of type 'type',
+--                      putting children of 'type' in the parent of 'type'.
+
 local p = g:parser('program')
 
-local results, err = p('let x = y + !z')
+local results, err = p('1 + 2')
 if err then
     print(err)
     return
 end
 
-local serpent = require('serpent')
-print('#results', #results)
-print(serpent.block(results, { comment = false }))
+assert(#results == 1, 'expected one result')
+
+local result = results[1]
+--result:strip('number')
+--result:flatten('number')
+result:flatten('equality')
+result:flatten('comparison')
+result:flatten('addition')
+result:flatten('multiplication')
+result:flatten('primary')
+result:flatten('block-statement-body')
+result:flatten('expression-statement')
+result:flatten('unary')
+result:flatten('addition-op')
+
+result:transform('number', function(node)
+    return 'previously-a-number'
+end)
+
+print(result)

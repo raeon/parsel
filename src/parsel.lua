@@ -156,24 +156,121 @@ do
 
     local Pattern = {}
 
-    function Pattern:new(pattern, priority)
-        self.pattern = pattern
+    function Pattern:new(value, priority)
+        self.value = value
         self.priority = priority or 0
     end
 
     function Pattern:__call(input, index)
         input = input:sub(index)
-        local first, last = input:find(self.pattern)
+        local first, last = input:find(self.value)
         if first == 1 then
             return input:sub(first, last)
         end
     end
 
     function Pattern:__tostring()
-        return format('/{0}/', self.pattern)
+        return format('/{0}/', self.value)
     end
 
     class(Pattern)
+
+    --[[
+        NODE
+    ]]
+
+    local Node = {}
+
+    function Node:new(type, value, children)
+        self.type = type
+        self.value = value -- only set for terminals
+        self.children = children or {}
+    end
+
+    function Node:strip(type)
+        -- Remove all nodes with type 'type' from this tree.
+        -- Note: This includes tokens.
+        for i, child in pairs(self.children) do
+            if child.type == type then
+                self.children[i] = nil
+            end
+            if is(child, Node) then
+                child:strip(type)
+            end
+        end
+
+        return self
+    end
+
+    function Node:flatten(type, into)
+        -- By default, if we are the root node, the flattened items
+        -- are to be inserted into our children.
+        local isRoot = not into
+        into = into or {}
+
+        -- We go over all our children.
+        for i, child in ipairs(self.children) do
+            if is(child, Node) then
+                if child.type == type then
+                    -- If the child needs to be flattened,
+                    -- instruct it to store all data in this node.
+                    child:flatten(type, into)
+                else
+                    -- If the child ITSELF does not need to be flattened,
+                    -- it is not certain that none of its children need
+                    -- to be flattened.
+
+                    -- We store this item in the result set since we're
+                    -- certain that it itself does not need to be flattened.
+                    push(into, child)
+
+                    -- However, next, we instruct the child to flatten
+                    -- without passing the 'into' parameter.
+                    child:flatten(type)
+                end
+            elseif type(child) == 'table' and child.type ~= type then
+                -- If it is a terminal symbol that does not need to be
+                -- flattened, insert it into the result set.
+                push(into, child)
+            end
+        end
+
+        if isRoot then
+            self.children = into
+        end
+
+        return self
+    end
+
+    function Node:transform(type, func)
+        -- Transform all nodes in this tree with type 'type' using
+        -- the given transformation function.
+        self.children = map(self.children, function(_, child)
+            if is(child, Node) then
+                local result = child:transform(type, func)
+                if is(result, Node) and result.type == type then
+                    return func(result)
+                end
+                return result
+            end
+            return child
+        end)
+
+        -- Also substitute ourselves if necessary.
+        return self.type == type and func(self) or self
+    end
+
+    function Node:isTerminal()
+        return self.value ~= nil
+    end
+
+    function Node:__tostring()
+        return self.value or 'node(' .. self.type .. ', ' .. table.concat(map(self.children, function(_, child)
+            return tostring(child)
+        end), ', ') .. ')'
+    end
+
+    class(Node)
 
     --[[
         RULES
@@ -262,10 +359,7 @@ do
             push(data, current.data)
             current = current.left
         until not (current and current.data)
-        return {
-            _name = self.rule.name,
-            data = reverse(data)
-        }
+        return Node(self.rule.name, nil, reverse(data))
     end
 
     function Item:isLast()
@@ -394,10 +488,10 @@ do
     end
 
     function Lexer:next()
-        local token
+        local token, prio
         repeat
-            token = self:forward()
-        until (not token) or token.type.priority >= 0
+            token, prio = self:forward()
+        until (not token) or prio >= 0
         return token
     end
 
@@ -417,12 +511,12 @@ do
         if self.current then
             local token = self.current
             self.current = nil
-            return token
+            return token, 0
         end
 
         -- No tokens past the EOF
         if self.index > #self.input then
-            return nil
+            return nil, nil
         end
 
         -- Otherwise, find the best token
@@ -432,10 +526,7 @@ do
             if (not bestPrio) or terminal.priority > bestPrio then
                 local token = terminal(self.input, self.index)
                 if token then
-                    bestToken = {
-                        value = token,
-                        type = terminal,
-                    }
+                    bestToken = Node(terminal, token, nil)
                     bestPrio = terminal.priority
                 end
             end
@@ -447,7 +538,7 @@ do
         end
 
         -- Return whatever the result is
-        return bestToken
+        return bestToken, bestPrio
     end
 
     function Lexer:line()
