@@ -489,16 +489,16 @@ do
                         local duplicate = contains(set.items, newItem)
                         if not duplicate then
                             push(set.items, newItem)
-                            -- push(newItem.wantedBy, {
-                            --     set = set,
-                            --     item = item
-                            -- })
+                            push(newItem.wantedBy, {
+                                set = set,
+                                item = item
+                            })
                         else
                             print('.. which is a DUPLICATE!\n')
-                            -- push(duplicate.wantedBy, {
-                            --     set = set,
-                            --     item = item,
-                            -- })
+                            push(duplicate.wantedBy, {
+                                set = set,
+                                item = item,
+                            })
                         end
                     end
                 elseif symbol then
@@ -525,35 +525,38 @@ do
                     -- NO SYMBOL: COMPLETION!
                     print('COMPLETION')
 
-                    -- Now we iterate over all items in the previous set
-                    -- that are waiting for this symbol to be resolved.
-                    local prevSet = sets[item.set]
-                    print('Going back to set: ' .. item.set)
-                    indent()
-                    local data = item:finish()
-                    for _, prevItem in pairs(prevSet.items) do
-                        -- If the previous item expected this symbol,
-                        -- we move them ahead!
-                        print('prevItem:', prevItem)
-                        local expectedSymbol = prevItem:symbol()
-                        print('Item expects: ' .. tostring(expectedSymbol))
-                        print('We are: ' .. item.rule.name)
-                        if expectedSymbol == item.rule.name then
-                            -- We can move this item to next!
-                            push(set.items, prevItem:next(data))
-                        end
-                    end
-                    outdent()
-                    -- Check all wantedBy's
-                    -- for _, position in pairs(item.wantedBy) do
-                    --     local fromItem = position.item
-                    --     print('wanted by: ' .. tostring(fromItem) .. ' from set ' .. tostring(position.set.index))
-                    --     local nextItem = fromItem:next()
-                    --
-                    --     if not contains(set.items, nextItem) then
-                    --         push(set.items, nextItem)
+                    -- -- Now we iterate over all items in the previous set
+                    -- -- that are waiting for this symbol to be resolved.
+                    -- local prevSet = sets[item.set]
+                    -- print('Going back to set: ' .. item.set)
+                    -- indent()
+                    -- local data = item:finish()
+                    -- for _, prevItem in pairs(prevSet.items) do
+                    --     -- If the previous item expected this symbol,
+                    --     -- we move them ahead!
+                    --     print('prevItem:', prevItem)
+                    --     local expectedSymbol = prevItem:symbol()
+                    --     print('Item expects: ' .. tostring(expectedSymbol))
+                    --     print('We are: ' .. item.rule.name)
+                    --     if expectedSymbol == item.rule.name then
+                    --         -- We can move this item to next!
+                    --         push(set.items, prevItem:next(data))
                     --     end
                     -- end
+                    -- outdent()
+
+                    local data = item:finish()
+
+                    -- Check all wantedBy's
+                    for _, position in pairs(item.wantedBy) do
+                        local fromItem = position.item
+                        print('wanted by: ' .. tostring(fromItem) .. ' from set ' .. tostring(position.set.index))
+                        local nextItem = fromItem:next(data)
+
+                        if not contains(set.items, nextItem) then
+                            push(set.items, nextItem)
+                        end
+                    end
                 end
 
                 outdent()

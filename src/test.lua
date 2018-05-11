@@ -32,7 +32,7 @@ g:define('expr', 'identifier')
 
 local p = g:parser('expr')
 
-local results = p('abc')
+local results = p('1 + (2 * 3 + 4)')
 local serpent = require('serpent')
 print('#results', #results)
 print(serpent.block(results, { comment = false }))
