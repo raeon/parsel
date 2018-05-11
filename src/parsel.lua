@@ -299,7 +299,10 @@ do
             push(data, current.data)
             current = current.left
         until not (current and current.data)
-        return reverse(data)
+        return {
+            _name = self.rule.name,
+            data = reverse(data)
+        }
     end
 
     function Item:isLast()
@@ -341,11 +344,7 @@ do
         end
     end
 
-    function Set:add(item)
-        push(self.items, item)
-    end
-
-    function Set:process(next)
+    function Set:process()
 
     end
 
@@ -440,8 +439,9 @@ do
 
     local Parser = {}
 
-    function Parser:new(grammar, start)
+    function Parser:new(grammar, root, start)
         self.grammar = grammar
+        self.root = root
         self.start = map(start, function(_, rule)
             return rule:item() -- starts in set 1, index 1
         end)
@@ -477,6 +477,7 @@ do
 
                     -- Add the first items of the rules to the current set.
                     local rules = self.grammar:findRules(symbol)
+                    assert(#rules > 0, 'encountered unknown nonterminal symbol: ' .. symbol)
                     for _, rule in pairs(rules) do
                         -- Grab a new unparsed item for this rule
                         local newItem = rule:item()
@@ -568,6 +569,18 @@ do
         for _, set in pairs(sets) do
             print(tostring(set) .. '\n')
         end
+
+        -- Find all items in the last set that begin at 1
+        local results = {}
+        local lastSet = peek(sets)
+        for _, item in pairs(lastSet.items) do
+            if item.set == 1
+            and item.rule.name == self.root
+            and item:isLast() then
+                push(results, item:finish())
+            end
+        end
+        return results
     end
 
     class(Parser)
@@ -598,7 +611,7 @@ do
     function Grammar:parser(name)
         local matches = self:findRules(name)
         assert(#matches > 0, 'could not find rule: ' .. name)
-        return Parser(self, matches)
+        return Parser(self, name, matches)
     end
 
     function Grammar:findRules(name)
@@ -628,8 +641,6 @@ do
 
     return {
         Grammar = Grammar,
-        Parser = Parser,
-        Rule = Rule,
         Literal = Literal,
         Pattern = Pattern,
     }

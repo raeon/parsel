@@ -10,6 +10,7 @@ local g = grammar()
 g:ignore(pattern('%s+'))
 
 g:define('number', pattern('[0-9]+'))
+g:define('identifier', pattern('[a-zA-Z]+'))
 g:define('lparen', literal('('))
 g:define('rparen', literal(')'))
 g:define('product-op', literal('*'))
@@ -26,6 +27,12 @@ g:define('product', 'factor')
 g:define('sum', 'sum', 'sum-op', 'product')
 g:define('sum', 'product')
 
-local p = g:parser('sum')
+g:define('expr', 'sum')
+g:define('expr', 'identifier')
 
-p('1 + (2 * 3 - 4)')
+local p = g:parser('expr')
+
+local results = p('abc')
+local serpent = require('serpent')
+print('#results', #results)
+print(serpent.block(results, { comment = false }))
