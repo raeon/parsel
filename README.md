@@ -1,5 +1,5 @@
 # parsel
-A simple parsing library for Lua without dependencies.
+A simple, powerful parser for Lua with zero dependencies.
 
 # Usage
 In this section we'll start with a typical example, followed by an in-depth explanation for how to build your grammar from scratch.
