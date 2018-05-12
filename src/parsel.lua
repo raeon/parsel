@@ -525,8 +525,11 @@ do
     end
 
     function Lexer:stats()
+        local index = self.index
+        if self.current then index = index - #self.current.value end
+
         -- Everything we have visited
-        local seen = self.input:gsub(1, self.index - 1)
+        local seen = self.input:gsub(1, index - 1)
 
         -- From the begin of the input to the current index,
         -- how many newlines are encountered?
@@ -535,13 +538,13 @@ do
 
         -- What character are we at?
         local last = seen:find('\n[^\n]*$') or 0
-        local col = self.index - last
+        local col = index - last
 
         return row, col
     end
 
     function Lexer:isDone()
-        return self.index > #self.input
+        return self.index > #self.input and not self.current
     end
 
     class(Lexer)
@@ -565,23 +568,33 @@ do
 
         local lexer = Lexer(self.grammar, input, index, opts)
         local set = Set(1, self.start)
-        local token = lexer:peek()
+        local next, token
 
-        -- Loop until we either run out of sets or tokens
-        while set and token do
-            -- Grab the next token
-            token = lexer:next()
+        -- next set, but no next token? unexpected eof
+        -- no next set, but next token? syntax error
+        -- no results and not eof? unexpected symbol
+
+        -- Loop until we run out of tokens
+        repeat
+            token = lexer:peek()
 
             -- Process the current set
-            local next = set:process(self.grammar, token)
-
-            -- If there is no next set, break.
-            if not next then
-                break
-            end
+            next = set:process(self.grammar, token)
+            if not next then break end
 
             -- Move to the next set and token.
             set = next
+            lexer:next()
+        until not (token and set)
+
+        -- Do some error checking
+        if token then
+            -- If there is a token remaining, it was unexpected.
+            return nil, self:error('unexpected token ' .. token.value, lexer)
+        elseif not lexer:isDone() then
+            -- If there is NOT a token remaining but the lexer is also not done,
+            -- then we must've encountered an unrecognized character.
+            return nil, self:error('unexpected character', lexer)
         end
 
         -- Find all items in the last set that begin at 1
@@ -597,9 +610,7 @@ do
         -- If there are no results, then we must have either
         -- reached EOF or an unexpected token. Throw an error.
         if #results == 0 then
-            return nil, self:error(lexer:isDone()
-                and 'unexpected end of file'
-                or 'unrecognized character', lexer)
+            return nil, self:error('unexpected end of file', lexer)
         end
 
         return results
