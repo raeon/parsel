@@ -1,209 +1,137 @@
 
-local utils = require('utils')
-local indent = utils.indent
-local outdent = utils.outdent
-local logger = utils.logger
-logger()
+-- Defining a grammar
+-- ..how?
 
-local any = require('parts.any')
-local every = require('parts.every')
-local literal = require('parts.literal')
-local pattern = require('parts.pattern')
-local Parser = require('parse.parser')
+local parsel = require('parsel')
+local grammar, literal, pattern = parsel.Grammar, parsel.Literal, parsel.Pattern
 
--- -- Expression constructs
--- local expression = any('expression')
---
--- -- General tokens
--- local lparen = literal('lparen', '(')
--- local rparen = literal('rparen', ')')
---
--- -- Literals
--- local number = pattern('number', '[0-9]+')
--- local identifier = pattern('identifier', '[a-zA-Z]+')
--- local btrue = literal('true', 'true')
--- local bfalse = literal('false', 'false')
--- local boolean = any('boolean', btrue, bfalse)
--- local null = literal('null', 'nil')
--- local value = any('value', number, identifier, boolean, null)
---
--- -- Binary operators
--- local plus = literal('plus', '+')
--- local minus = literal('minus', '-')
--- local divide = literal('divide', '/')
--- local multiply = literal('multiply', '*')
--- local lessequal = literal('lessequal', '<=')
--- local greaterequal = literal('greaterequal', '>=')
--- local less = literal('less', '<')
--- local greater = literal('greater', '>')
--- local notequals = literal('notequals', '!=')
--- local equals = literal('equals', '==')
--- local binaryop = any('binary-operator', plus, minus, divide, multiply,
---     lessequal, greaterequal, less, greater, notequals, equals)
--- local binary = every('binary', expression, binaryop, expression)
---
--- -- Unary operators
--- local bang = literal('negate', '!')
--- local unaryop = any('unary-operator', bang, minus)
--- local unary = every('unary', unaryop, expression)
---
--- -- Groupings
--- local closed = every('closed-expression', lparen, expression, rparen)
---
--- -- Expression
--- expression:add(binary)
--- expression:add(unary)
--- expression:add(closed)
--- expression:add(value)
+local g = grammar()
 
---local value = any('value', number, identifier)
---local expr = any('expr', value)
---expr:add(expr)
+g:ignore(pattern('%s+'))
 
--- for _, state in pairs(value.states) do
---     print(state)
--- end
+-- Primitives
+g:define('number', pattern('[0-9]+'))
+g:define('identifier', pattern('[a-zA-Z]+'))
+g:define('boolean', literal('true'))
+g:define('boolean', literal('false'))
+g:define('nil', literal('nil'))
+g:define('closed', 'lparen', 'expression', 'rparen')
+-- TODO: String
 
-local function printStates(obj, visited)
-    visited = visited or {}
-    if visited[obj] then
-        print('object: ' .. tostring(obj) .. ' (already visited)')
-        return
-    end
-    visited[obj] = true
+-- Keywords
+g:define('let', literal('let', 500))
+g:define('if', literal('if', 500))
 
-    print('object: ' .. tostring(obj))
-    indent()
+-- Operators
+g:define('lparen', literal('('))
+g:define('rparen', literal(')'))
+g:define('lbrace', literal('{'))
+g:define('rbrace', literal('}'))
+g:define('multiplication-op', literal('*'))
+g:define('multiplication-op', literal('/'))
+g:define('addition-op', literal('+'))
+g:define('addition-op', literal('-'))
+g:define('equality-op', literal('!='))
+g:define('equality-op', literal('=='))
+g:define('comparison-op', literal('<'))
+g:define('comparison-op', literal('>'))
+g:define('comparison-op', literal('<='))
+g:define('comparison-op', literal('>='))
+g:define('unary-op', literal('!'))
+g:define('unary-op', literal('-'))
+g:define('assign-op', literal('='))
 
-    if obj.versions then
-        for _, version in pairs(obj.versions) do
-            print('version: ' .. tostring(version))
-            indent()
-            printStates(version)
-            outdent()
-        end
-        outdent()
-        return
-    end
+--[[
+    PROGRAM
+]]
+g:define('program', 'block-statement-body')
 
-    for _, state in pairs(obj.states) do
-        print('state: ' .. tostring(state))
-        indent()
-        print('closure: ' .. tostring(state.closure))
-        for symbol, to in pairs(state.lookaheads) do
-            if to.shift then
-                print(symbol, ' => shift ', tostring(to.shift))
-                printStates(to.shift.part, visited)
-            else
-                print(symbol, ' => reduce ', tostring(to.reduce))
-                printStates(to.reduce, visited)
-            end
-        end
-        for symbol, to in pairs(state.gotos) do
-            print(symbol, ' => goto ', tostring(to))
-        end
-        outdent()
-    end
-    outdent()
-end
+--[[
+    STATEMENTS
+]]
+g:define('statement', 'let-statement')
+g:define('statement', 'if-statement')
+g:define('statement', 'block-statement')
+g:define('statement', 'expression-statement')
 
-local plus = literal('plus', '+')
-local minus = literal('minus', '-')
-local bang = literal('bang', '!')
+-- Let statement
+g:define('let-statement', 'let', 'identifier', 'assign-op', 'expression')
 
-local value = pattern('value', '[a-zA-Z]')
-local binaryOp = any('binary-op', plus, minus)
-local unaryOp = any('unary-op', bang, minus)
+-- If statement
+g:define('if-statement', 'if', 'expression', 'statement')
 
-local expr = any('expr')
-local unary = every('unary', unaryOp, expr)
-local binary = every('binary', expr, binaryOp, expr)
+-- Block statement
+g:define('block-statement-body', 'block-statement-body', 'statement')
+g:define('block-statement-body', 'statement')
+g:define('block-statement', 'lbrace', 'block-statement-body', 'rbrace')
 
-expr:add(unary)
-expr:add(binary)
-expr:add(value)
+-- Expression statement
+g:define('expression-statement', 'expression')
 
--- root -> A
--- A -> B | x
--- B -> A | y
+--[[
+    EXPRESSIONS
+]]
+g:define('closed', 'lparen', 'expression', 'rparen')
+g:define('expression', 'equality')
 
--- root -> . A
--- root -> A .
--- A -> . B
--- A -> B .
--- A -> . x
--- A -> x .
--- B -> . A
--- B -> A .
--- B -> . y
--- B -> y .
+-- Equality
+g:define('equality', 'equality', 'equality-op', 'comparison')
+g:define('equality', 'comparison')
 
--- In state "A -> x ." we want to detect symbol 'y'.
+-- Comparison
+g:define('comparison', 'comparison', 'comparison-op', 'addition')
+g:define('comparison', 'addition')
 
--- We expect that the state
---  root -> A .
+-- Addition
+g:define('addition', 'addition', 'addition-op', 'multiplication')
+g:define('addition', 'multiplication')
 
--- a:add(b)
--- b:add(literal('x', 'x'))
--- b:add(literal('y', 'y'))
+-- Multiplication
+g:define('multiplication', 'multiplication', 'multiplication-op', 'unary')
+g:define('multiplication', 'unary')
 
--- a:buildClosures()
--- a:buildTables()
--- dumpPart(a)
--- if true then return end
--- local plus = literal('plus', '+')
--- local number = pattern('number', '[0-9]+')
--- local identifier = pattern('identifier', '[a-zA-Z]+')
---
--- local value = any('value', number, identifier)
---
--- local expr = any('expr')
---
--- expr:add(every('binary', expr, plus, expr))
--- expr:add(value)
+-- Unary
+g:define('unary', 'unary-op', 'unary')
+g:define('unary', 'primary')
 
--- print() print()
--- a:buildClosures()
--- print() print()
--- a:buildTables()
--- print() print()
+-- Primary
+g:define('primary', 'number')
+g:define('primary', 'identifier')
+g:define('primary', 'boolean')
+g:define('primary', 'nil')
+g:define('primary', 'closed')
 
---printStates(a)
---if true then return end
+-- node.text => concatenated string
+-- node.strip(type) => find all subnodes with type
+-- node.transform(type, func) => call func for each node of the given type
+-- node.reduce(type) => removes all nodes of type 'type',
+--                      putting children of 'type' in the parent of 'type'.
 
-local parser = Parser(expr)
-local result, err = parser('!x')
+local p = g:parser('program')
+
+local results, err = p('1 + 2')
 if err then
-    print('Parsing failed:', err)
+    print(err)
     return
 end
 
-print('Result:', result)
+assert(#results == 1, 'expected one result')
 
+local result = results[1]
+--result:strip('number')
+--result:flatten('number')
+result:flatten('equality')
+result:flatten('comparison')
+result:flatten('addition')
+result:flatten('multiplication')
+result:flatten('primary')
+result:flatten('block-statement-body')
+result:flatten('expression-statement')
+result:flatten('unary')
+result:flatten('addition-op')
 
-if true then return end
+result:transform('number', function(node)
+    return 'previously-a-number'
+end)
 
-
-
-
--- local a = any('expr')
--- local b = every('binary')
---
--- b:add(a)
--- b:add(plus)
--- b:add(a)
---
--- a:add(b)
--- a:add(number)
---
--- a:finalize()
--- dumpPart(a)
--- if true then return end
---
--- local parser = Parser(a, '5+3+4', 1)
--- local expr, err = parser:parse()
--- if err then
---     print('Parser failed:', err)
---     return
--- end
--- print(expr)
+print(result)
