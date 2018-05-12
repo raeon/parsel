@@ -146,9 +146,10 @@ do
 
     local Node = {}
 
-    function Node:new(type, value, children)
+    function Node:new(type, value, position, children)
         self.type = type
         self.value = value -- only set for terminals
+        self.position = position
         self.children = children or {}
     end
 
@@ -249,8 +250,8 @@ do
         self.symbols = symbols
     end
 
-    function Rule:item()
-        return Item(self, 1)
+    function Rule:item(position)
+        return Item(self, 1, position)
     end
 
     function Rule:__tostring(index)
@@ -268,9 +269,10 @@ do
         STATE
     ]]
 
-    function Item:new(rule, index, left)
+    function Item:new(rule, index, position, left)
         self.rule = rule
         self.index = index
+        self.position = position
         self.set = left and left.set or 1
 
         -- Left = previous item
@@ -290,13 +292,13 @@ do
         return self.rule.symbols[self.index]
     end
 
-    function Item:next(token)
+    function Item:next(data)
         assert(not self.right, 'attempt to move item to next but already has next')
         assert(not self:isLast(), 'attempt to call next on already final item')
 
-        local next = Item(self.rule, self.index + 1, self)
+        local next = Item(self.rule, self.index + 1, data.position, self)
         next.left = self
-        next.data = token
+        next.data = data
         return next
     end
 
@@ -320,11 +322,13 @@ do
         -- Collect the data in all previous items and return it.
         local data = {}
         local current = self
+        local position
         repeat
+            position = current.position
             table.insert(data, current.data)
             current = current.left
         until not (current and current.data)
-        return Node(self.rule.name, nil, reverse(data))
+        return Node(self.rule.name, nil, position,  reverse(data))
     end
 
     function Item:isLast()
@@ -363,7 +367,7 @@ do
         end
     end
 
-    function Set:process(grammar, token)
+    function Set:process(grammar, token, position)
         -- Here we handle all items in this set.
         for _, item in pairs(self.items) do
 
@@ -379,7 +383,7 @@ do
                 -- PREDICTION
                 -- If the symbol is a string, then it is a *rule*.
                 -- We expand these rules into this given set.
-                self:predict(grammar, item, symbol)
+                self:predict(grammar, item, symbol, position)
             else
                 -- SCAN
                 -- The only remaining scenario is that this is a literal or pattern.
@@ -396,13 +400,13 @@ do
         return self.right
     end
 
-    function Set:predict(grammar, item, symbol)
+    function Set:predict(grammar, item, symbol, position)
         local rules = grammar.rules[symbol]
         assert(#rules > 0, 'encountered undefined nonterminal: ' .. symbol)
         for _, rule in pairs(grammar.rules[symbol]) do
             -- Create the first item for this rule, or grab an already
             -- existing item of the same type if it exists within this set.
-            local newItem = rule:item()
+            local newItem = rule:item(position)
             newItem.set = self.index
             local duplicate = contains(self.items, newItem)
 
@@ -487,13 +491,14 @@ do
         end
 
         -- Otherwise, find the best token
+        local position = self:position()
         local bestToken = nil
         local bestPrio = nil
         for _, terminal in pairs(self.terminals) do
             if (not bestPrio) or terminal.priority > bestPrio then
                 local token = terminal(self.input, self.index)
                 if token then
-                    bestToken = Node(terminal, token, nil)
+                    bestToken = Node(terminal, token, position, nil)
                     bestPrio = terminal.priority
                 end
             end
@@ -543,6 +548,12 @@ do
         return row, col
     end
 
+    function Lexer:position()
+        local index = self.index
+        local row, col = self:stats()
+        return { index = index, line = row, column = col }
+    end
+
     function Lexer:isDone()
         return self.index > #self.input and not self.current
     end
@@ -579,7 +590,7 @@ do
             token = lexer:peek()
 
             -- Process the current set
-            next = set:process(self.grammar, token)
+            next = set:process(self.grammar, token, lexer:position())
             if not next then break end
 
             -- Move to the next set and token.
