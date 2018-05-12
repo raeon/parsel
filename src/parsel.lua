@@ -6,18 +6,6 @@ do
 
     local concat = table.concat
 
-    local function push(tbl, v)
-        table.insert(tbl, v)
-    end
-
-    local function pop(tbl)
-        return table.remove(tbl, #tbl)
-    end
-
-    local function peek(tbl)
-        return tbl[#tbl]
-    end
-
     local function map(tbl, fn)
         local t = {}
         for k,v in pairs(tbl) do
@@ -25,18 +13,18 @@ do
             if v then
                 t[k] = v
             else
-                push(t, k)
+                table.insert(t, k)
             end
         end
         return t
     end
 
-    local function filter(tbl, fn, usePush)
+    local function filter(tbl, fn, useInsert)
         local t = {}
         for k,v in pairs(tbl) do
             if fn(k,v) then
-                if usePush then
-                    push(t, v)
+                if useInsert then
+                    table.insert(t, v)
                 else
                     t[k] = v
                 end
@@ -50,7 +38,7 @@ do
         for j=1,i,1 do
             local k,v = fn(j)
             if not v then
-                push(t, k) -- only value
+                table.insert(t, k) -- only value
             else
                 t[k] = v -- both key and value
             end
@@ -100,31 +88,8 @@ do
         })
     end
 
-    local function indent()
-        _G.__indent = (_G.__indent or 0) + 1
-    end
-
-    local function outdent()
-        _G.__indent = math.max(0, _G.__indent - 1) or 0
-    end
-
-    local function logger()
-        if _G.__logger then return end
-        _G.__logger = true
-        _G.__print = print
-
-        local _print = print
-        _G.print = function(...)
-            local str = table.concat(map({...}, function(k,v) return tostring(v) end), '\t')
-            local whitespace = string.rep('|  ', _G.__indent or 0)
-            str = whitespace .. str:gsub('\n', '\n' .. whitespace)
-            _print(str)
-        end
-    end
-    logger()
-
     local function is(inst, cls)
-        return type(inst) == 'table' and inst.__class and inst.__class == cls
+        return inst.__class and inst.__class == cls
     end
 
     --[[
@@ -206,8 +171,7 @@ do
         -- By default, if we are the root node, the flattened items
         -- are to be inserted into our children.
         local isRoot = not into
-
-        into = into or (self.type == type and {} or nil)
+        into = into or {}
 
         -- We go over all our children.
         for i, child in ipairs(self.children) do
@@ -223,9 +187,7 @@ do
 
                     -- We store this item in the result set since we're
                     -- certain that it itself does not need to be flattened.
-                    if into then
-                        push(into, child)
-                    end
+                    table.insert(into, child)
 
                     -- However, next, we instruct the child to flatten
                     -- without passing the 'into' parameter.
@@ -234,11 +196,11 @@ do
             elseif type(child) == 'table' and child.type ~= type then
                 -- If it is a terminal symbol that does not need to be
                 -- flattened, insert it into the result set.
-                push(into, child)
+                table.insert(into, child)
             end
         end
 
-        if isRoot and into then
+        if isRoot then
             self.children = into
         end
 
@@ -248,7 +210,7 @@ do
     function Node:transform(type, func)
         -- Transform all nodes in this tree with type 'type' using
         -- the given transformation function.
-        self.children = map(self.children, function(i, child)
+        self.children = map(self.children, function(_, child)
             if is(child, Node) then
                 local result = child:transform(type, func)
                 if is(result, Node) and result.type == type then
@@ -268,7 +230,7 @@ do
     end
 
     function Node:__tostring()
-        return self.value or self.type .. '(' .. table.concat(map(self.children, function(_, child)
+        return self.value or 'node(' .. self.type .. ', ' .. table.concat(map(self.children, function(_, child)
             return tostring(child)
         end), ', ') .. ')'
     end
@@ -349,7 +311,7 @@ do
             local nextItem = fromItem:next(data)
 
             if not contains(set.items, nextItem) then
-                push(set.items, nextItem)
+                table.insert(set.items, nextItem)
             end
         end
     end
@@ -359,7 +321,7 @@ do
         local data = {}
         local current = self
         repeat
-            push(data, current.data)
+            table.insert(data, current.data)
             current = current.left
         until not (current and current.data)
         return Node(self.rule.name, nil, reverse(data))
@@ -379,7 +341,7 @@ do
     end
 
     function Item:__tostring()
-        return self.rule:__tostring(self.index) .. '\t\t(' .. self.set .. ')'
+        return self.rule:__tostring(self.index) .. ' (' .. self.set .. ')'
     end
 
     class(Item)
@@ -397,7 +359,7 @@ do
         self.right = nil
 
         for _, item in pairs(items or {}) do
-            push(self.items, item)
+            table.insert(self.items, item)
         end
     end
 
@@ -425,7 +387,7 @@ do
                 if token and token.type == symbol then
                     -- If this was expected, we add the resulting item
                     -- to the next set with a reference to this set.
-                    push(self:next().items, item:next(token))
+                    table.insert(self:next().items, item:next(token))
                 end
             end
         end
@@ -446,11 +408,11 @@ do
 
             -- Add the item if it wasn't a duplicate
             if not duplicate then
-                push(self.items, newItem)
+                table.insert(self.items, newItem)
             end
 
             -- Add the wantedBy to whichever item we're using
-            push(duplicate and duplicate.wantedBy or newItem.wantedBy, {
+            table.insert(duplicate and duplicate.wantedBy or newItem.wantedBy, {
                 set = self,
                 item = item,
             })
@@ -628,7 +590,7 @@ do
             if item.set == 1
             and item.rule.name == self.root
             and item:isLast() then
-                push(results, item:collect())
+                table.insert(results, item:collect())
             end
         end
 
@@ -675,13 +637,13 @@ do
         assert(#symbols > 0, 'rules must have at least 1 symbol')
 
         -- Add the rule to self.rules[result]
-        push(self.rules[result], Rule(result, symbols))
+        table.insert(self.rules[result], Rule(result, symbols))
 
         -- Store any new terminals
         for _, symbol in pairs(symbols) do
             if is(symbol, Literal) or is(symbol, Pattern) then
                 if not contains(self.terminals, symbol) then
-                    push(self.terminals, symbol)
+                    table.insert(self.terminals, symbol)
                 end
             end
         end
@@ -690,7 +652,7 @@ do
     function Grammar:ignore(terminal)
         assert(is(terminal, Literal) or is(terminal, Pattern), 'can only ignore terminal symbols')
         terminal.priority = -1
-        push(self.terminals, terminal)
+        table.insert(self.terminals, terminal)
     end
 
     function Grammar:parser(name)
