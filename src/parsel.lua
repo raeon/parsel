@@ -124,7 +124,7 @@ do
     logger()
 
     local function is(inst, cls)
-        return inst.__class and inst.__class == cls
+        return type(inst) == 'table' and inst.__class and inst.__class == cls
     end
 
     --[[
@@ -206,7 +206,8 @@ do
         -- By default, if we are the root node, the flattened items
         -- are to be inserted into our children.
         local isRoot = not into
-        into = into or {}
+
+        into = into or (self.type == type and {} or nil)
 
         -- We go over all our children.
         for i, child in ipairs(self.children) do
@@ -222,7 +223,9 @@ do
 
                     -- We store this item in the result set since we're
                     -- certain that it itself does not need to be flattened.
-                    push(into, child)
+                    if into then
+                        push(into, child)
+                    end
 
                     -- However, next, we instruct the child to flatten
                     -- without passing the 'into' parameter.
@@ -235,7 +238,7 @@ do
             end
         end
 
-        if isRoot then
+        if isRoot and into then
             self.children = into
         end
 
@@ -245,7 +248,7 @@ do
     function Node:transform(type, func)
         -- Transform all nodes in this tree with type 'type' using
         -- the given transformation function.
-        self.children = map(self.children, function(_, child)
+        self.children = map(self.children, function(i, child)
             if is(child, Node) then
                 local result = child:transform(type, func)
                 if is(result, Node) and result.type == type then
@@ -265,7 +268,7 @@ do
     end
 
     function Node:__tostring()
-        return self.value or 'node(' .. self.type .. ', ' .. table.concat(map(self.children, function(_, child)
+        return self.value or self.type .. '(' .. table.concat(map(self.children, function(_, child)
             return tostring(child)
         end), ', ') .. ')'
     end
