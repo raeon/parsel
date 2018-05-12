@@ -86,6 +86,16 @@ g:define('identifier', pattern '[a-zA-Z]+')
 ```
 **Note:** The `pattern '[0-9]+'` is a function call using an alternative syntax supported by Lua. It is syntactically equivalent to calling the function normally, like so: `pattern('[0-9]+')`.
 
+#### Priorities
+Sometimes, you have multiple tokens in your grammar that are ambiguous. For example, in many programming languages you have the `>`, the `>=` and the `=` operator. `parsel` works by first tokenizing the input using all defined terminals. However, as you might have deduced already, it is possible for the tokenizer to misinterpret a `>=` as both a `>` and a `=` token. This is clearly undesirable! For this reason, you can pass another argument to the `Literal` or `Parser` functions: the priority. By default, the priority is `0`. For this example we would want to assign a higher priority to the `>=` operator, which could be done like this:
+```lua
+g:define('greater', literal '>')
+g:define('greater-or-equal', literal('>=', 500))
+g:define('assignment', literal '=')
+```
+
+**Warning: Priorities below zero are ignored!** They are used internally by the `g:ignore(...)` function. Therefore, you should always use zero or greater as your priority.
+
 ### Nonterminals
 Now that we have our terminals ready, we can start composing our nonterminal symbols. For this example, let's say we want to parse any number of `number`s followed by a single `identifier` symbol. We can accomplish this by defining a recursive symbol.
 ```lua
