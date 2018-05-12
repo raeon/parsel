@@ -72,16 +72,19 @@ print('\nRefined AST:', ast)
 Defining your own grammar is easy! Just create a new `Grammar` object like so:
 ```lua
 local parsel = require('parsel')
-local g = parsel.Grammar()
+local grammar, literal, pattern = parsel.Grammar, parsel.Literal, parsel.Pattern
+
+local g = grammar()
 ```
 From here on out we will define symbols.
 
 ### Terminals
 Using this grammar object you can start defining your terminal and nonterminal symbols. Currently, there are two types of terminal symbols available for use: the `Literal` and the `Pattern`. As the names suggest, the `Literal` is an exact match of the string you pass it. The `Pattern` only matches the Lua pattern you give it, which is particularly useful when you want to match numbers (`[0-9]+`) or identifiers (`[a-zA-Z]+`). This looks like so (continuing from the previous snippet):
 ```lua
-g:define('number', parsel.Pattern('[0-9]+'))
-g:define('identifier', parsel.Pattern('[a-zA-Z]+'))
+g:define('number', pattern '[0-9]+')
+g:define('identifier', pattern '[a-zA-Z]+')
 ```
+**Note:** The `pattern '[0-9]+'` is a function call using an alternative syntax supported by Lua. It is syntactically equivalent to calling the function normally, like so: `pattern('[0-9]+')`.
 
 ### Nonterminals
 Now that we have our terminals ready, we can start composing our nonterminal symbols. For this example, let's say we want to parse any number of `number`s followed by a single `identifier` symbol. We can accomplish this by defining a recursive symbol.
@@ -94,7 +97,7 @@ What we've done here is define the nonterminal `sequence` with two possible ways
 ### Ignored terminals
 Sometimes we want to flat-out ignore some `Literal` or `Pattern`. In our example, we wish to allow an arbitrary amount of whitespace between symbols. We accomplish this like so:
 ```lua
-g:ignore(parsel.Pattern('%s+'))
+g:ignore(pattern '%s+')
 ```
 
 ## Parsing
