@@ -1,0 +1,25 @@
+package = "parsel"
+version = "1.0-1"
+source = {
+    url = "git+https://github.com/raeon/parsel.git"
+}
+description = {
+    summary = "A simple, powerful parser for Lua with zero dependencies.",
+    detailed = [[
+        Parsel is a simple, but unrelentingly powerful parsing library
+        written in pure Lua with zero dependencies. With it, you can
+        define and parse your context-free grammars with ease. All forms
+        of recursion are no issue, and even ambiguous grammars are supported.
+    ]],
+    homepage = "https://github.com/raeon/parsel",
+    license = "MIT"
+}
+dependencies = {
+    "lua >= 5.1, < 5.4"
+}
+build = {
+    type = "builtin",
+    modules = {
+        parsel = "src/parsel.lua"
+    }
+}
