@@ -117,7 +117,7 @@ if err then
 end
 ```
 A typical error could look like this:
-```lua
+```
 Error: unexpected end of file at line 1 char 15:
 
     1 + (2 * 3 - 4
