@@ -19,8 +19,8 @@ g:define('sum-operator', literal('+'))
 g:define('sum-operator', literal('-'))
 g:define('product-operator', literal('*'))
 g:define('product-operator', literal('/'))
-g:define('lparen', literal('('))
-g:define('rparen', literal(')'))
+g:define('lparen', literal '(') -- since Lua supports it, we might as well
+g:define('rparen', literal ')') -- skip the parens when calling a function!
 
 -- Defining nonterminal productions
 g:define('sum', 'sum', 'sum-operator', 'product')
@@ -32,7 +32,7 @@ g:define('product', 'factor')
 g:define('factor', 'lparen', 'sum', 'rparen')
 g:define('factor', 'number')
 
-g:define('number', pattern('[0-9]+'))
+g:define('number', pattern '[0-9]+')
 
 -- Creating a parser
 local parse = g:parser('sum')
@@ -106,7 +106,7 @@ Now we can pass our input string (and optionally a starting index in the input s
 ```lua
 local results, err = parser('12 34 56 hello')
 ```
-**Note:** If you pass an index as the second argument to the parser, keep in mind that Lua starts counting at 1. For example, if you use index 2, you will begin parsing at the '5' character.
+**Note:** If you pass an index as the second argument to the parser, keep in mind that Lua starts counting at 1. For example, if you use index 2, you will begin parsing at the '2' character.
 
 ## Error handling
 If the parser encounters any unexpected tokens or unrecognized characters, it will give a fancy error. Let's handle this scenario:
@@ -211,11 +211,11 @@ The reason for this is actually quite simple. If we look back at our definition 
 g:define('number', parsel.Pattern('[0-9]+'))
 ```
 
-**We defined `number` as a nonterminal.** This means that `number` is merely a wrapper for the terminal symbol that holds the value. This is why we grab the *first child* from the container, and convert it's `value` field to a number.
+**We defined `number` as a nonterminal.** This means that `number` is merely a wrapper for the terminal symbol `Pattern('[0-9]+')`. This is why we grab the *first child* from the container, which is the `Pattern`, and convert it's `value` field to a number.
 
 **Note:** Since we apply this transformation to the root node, **all** occurrences of `number` are replaced with the result of the transformation function.
 
-**Note:** If the symbol on which you invoke `transform` needs to be transformed itself, then the result of the method call is the result of that transformation.
+**Note:** If the node on which you invoke `transform` needs to be transformed itself, then the result of the method call is the result of that transformation.
 
 After the transformation, we get the following AST:
 ```lua
