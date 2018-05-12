@@ -432,6 +432,8 @@ do
     end
 
     function Set:predict(grammar, item, symbol)
+        local rules = grammar.rules[symbol]
+        assert(#rules > 0, 'encountered undefined nonterminal: ' .. symbol)
         for _, rule in pairs(grammar.rules[symbol]) do
             -- Create the first item for this rule, or grab an already
             -- existing item of the same type if it exists within this set.
