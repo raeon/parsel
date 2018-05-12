@@ -9,7 +9,7 @@ description = {
         Parsel is a simple, but unrelentingly powerful parsing library
         written in pure Lua with zero dependencies. With it, you can
         define and parse your context-free grammars with ease. All forms
-        of recursion are supported, and even ambiguous grammars are supported.
+        of recursion are supported, along with ambiguous grammars.
     ]],
     homepage = "https://github.com/raeon/parsel",
     license = "MIT"
