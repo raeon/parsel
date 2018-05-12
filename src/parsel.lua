@@ -213,11 +213,7 @@ do
         -- the given transformation function.
         self.children = map(self.children, function(_, child)
             if is(child, Node) then
-                local result = child:transform(type, func)
-                if is(result, Node) and result.type == type then
-                    return func(result)
-                end
-                return result
+                return child:transform(type, func)
             end
             return child
         end)
