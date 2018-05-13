@@ -1,6 +1,34 @@
 # parsel
 A simple, powerful parser for Lua with zero dependencies.
 
+# Table of contents
+<!-- TOC depthFrom:1 depthTo:6 withLinks:1 updateOnSave:0 orderedList:0 -->
+
+- [Usage](#usage)
+	- [Example](#example)
+	- [Defining a grammar](#defining-a-grammar)
+		- [Terminals](#terminals)
+			- [Priorities](#priorities)
+		- [Nonterminals](#nonterminals)
+		- [Ignored terminals](#ignored-terminals)
+	- [Parsing](#parsing)
+	- [Error handling](#error-handling)
+	- [Result manipulation](#result-manipulation)
+		- [Merging](#merging)
+		- [Flattening](#flattening)
+		- [Transforming](#transforming)
+		- [Stripping](#stripping)
+- [Quick reference](#quick-reference)
+	- [Grammar](#grammar)
+	- [Literal](#literal)
+	- [Pattern](#pattern)
+	- [Parser](#parser)
+	- [Node](#node)
+- [Credits](#credits)
+- [License](#license)
+
+<!-- /TOC -->
+
 # Usage
 In this section we'll start with a typical example, followed by an in-depth explanation for how to build your grammar from scratch.
 
@@ -273,6 +301,46 @@ tree:strip('rparen')
 tree:strip('comma')
 ```
 Now we're certain all symbols we encounter are significant to our understanding of the parsed input.
+
+# Quick reference
+
+To quickly understand how to read this reference, see the following examples for a fictional class `Object`:
+- `__call()` is actually `Object()`
+- `:__call()` is actually `myObjectInstance()`
+- `:__tostring()` is actually `tostring(myObjectInstance)`
+- `.value` is the field `value` on an `Object` instance
+- `:act()` is the method `act` on an `Object` instance
+
+Internal methods are not shown here for the sake of being a *quick* reference.
+
+## Grammar
+- `__call()` => constructs a new Grammar instance
+- `:define(name, symbols..)` => defines production `name` -> `symbols`
+- `:ignore(symbol)` => ignores the given symbol completely during tokenization
+- `:parser(name)` => returns a Parser using the rule(s) as the root production
+
+## Literal
+- `__call(value[, priority])` => constructs a new literal terminal symbol that parses the literal string `value` with priority `priority` (default: 0).
+- `:__tostring()` => the `value` string passed during construction
+
+## Pattern
+- `__call(value[, priority])` => constructs a new pattern terminal symbol that parses the Lua pattern `value` with priority `priority` (default: 0)
+- `:__tostring()` => the `value` string passed during construction
+
+## Parser
+- `__call(input[, index])` => parses `input`, optionally starting at index `index`. returns a list of root nodes and an error string.
+
+## Node
+- `.type` => the type of this node (name of nonterminal or a `Literal` or `Pattern` instance)
+- `.value` => if this node is a terminal, the raw string represented by this terminal. nil otherwise.
+- `.position` => the position where this symbol starts: an object with keys `index`, `line` and `column`, all numbers.
+- `.children` => table of `Node` instances (empty table for terminals)
+- `:strip(type)` => removes all nodes with type `type`
+- `:merge(type)` => merges nodes of type `type` into their parent if their parent is also of type `type`.
+- `:flatten(type)` => for all nodes of type `type`, if they have exactly one child, the node is replaced with their child.
+- `:transform(type, fn)` => replaces all nodes of type `type` with the result of `fn(node)`.
+- `:isTerminal()` => whether this is a terminal symbol or not
+- `:__tostring()` => converts this node to a string representation
 
 # Credits
 - [Loup Vaillant](http://loup-vaillant.fr) for his excellent guide to [Earley parsing](http://loup-vaillant.fr/tutorials/earley-parsing/);
