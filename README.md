@@ -203,7 +203,6 @@ Again, in tree form:
 Neat! Now we no longer have to deal with recursion when we try to interpret `sequence` symbols.
 
 ### Flattening
-
 In a real-world scenario, it might occur that you have a grammar defined in such a way that it enforces operator precedence to be interpreted correctly. A parse tree produced by such a grammar may look like this:
 ```
             expression
@@ -229,7 +228,6 @@ What this does is scan through the tree, and *replace* any node of the given typ
 **Note:** If the root node (the object on which you call the function) needs to be flattened as well, be sure use the **return value** of the call, like so: `tree = tree:flatten(type)`. It is however not recommended to flatten the root node since it may return a terminal symbol as the new root node, which may interfere with any traversion happening hereafter.
 
 ### Transforming
-
 For some use-cases, the parse tree returned by `parsel` is sufficient. However, a lot of times it just happens that we want to store more data and functions in the nodes of the parse tree. We could always just store more data (since everything in Lua is a table), but that becomes messy quickly and does not allow us to cleanly add methods. In such scenarios it may be useful to transform the nodes of the parse tree to another type.
 
 An excellent example of this is converting the `number` nodes to *actual numbers*, since they are just strings for now. We can do this by writing a *transformation function*: a function that that takes a `number` node and returns a real number. Let's write this function and apply it straight away:
@@ -262,7 +260,6 @@ sequence(12, 34, 56, identifier(hello))
 Nice and simple!
 
 ### Stripping
-
 In grammars, it may occur that there are some terminal symbols that are used merely for disambiguation. An example of this is if we were to parse, for example, a function call `func(arg1, arg2, arg2, ..., argN)` we don't need to remember the left/right parenthesis or the commas. For cases like this, we can strip the symbols from the parse tree:
 ```lua
 g:define('lparen', literal '(')
@@ -275,7 +272,7 @@ tree:strip('lparen')
 tree:strip('rparen')
 tree:strip('comma')
 ```
-Now we're certain all symbols we encounter
+Now we're certain all symbols we encounter are significant to our understanding of the parsed input.
 
 # Credits
 - [Loup Vaillant](http://loup-vaillant.fr) for his excellent guide to [Earley parsing](http://loup-vaillant.fr/tutorials/earley-parsing/);
