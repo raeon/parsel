@@ -180,7 +180,7 @@ This may appear somewhat nonsensical, so here it is in tree form:
 
 For this section, we'll continue using our example from before. As expected, the resulting parse tree has the right-recursion we embedded in our grammar. However, in our case, we didn't actually *want* a right-recursive parse tree, we merely wanted to have a sequence of `number`s followed by a single `identifier`.
 
-Luckily for us, `parsel` has just the tools we need! We can simply tell the parse tree to *merge* the `sequence` nonterminal like so:
+Luckily for us, `parsel` has just the tools we need! We can simply tell the parse tree to *merge* all `sequence` nonterminals like so:
 ```lua
 tree:merge('sequence')
 ```
@@ -204,7 +204,7 @@ Neat! Now we no longer have to deal with recursion when we try to interpret `seq
 
 ### Flattening
 
-In a real world scenario, it might occur that you have a grammar defined in such a way that it enforces operator precedence to be interpreted correctly. A parse tree produced by such a grammar may look like this:
+In a real-world scenario, it might occur that you have a grammar defined in such a way that it enforces operator precedence to be interpreted correctly. A parse tree produced by such a grammar may look like this:
 ```
             expression
                 |
