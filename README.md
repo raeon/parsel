@@ -1,9 +1,10 @@
 # parsel
 A simple, powerful parser for Lua with zero dependencies.
 
-# Table of contents
-<!-- TOC depthFrom:1 depthTo:6 withLinks:1 updateOnSave:1 orderedList:0 -->
+## Table of contents
+<!-- TOC depthFrom:2 depthTo:6 withLinks:1 updateOnSave:1 orderedList:0 -->
 
+- [Table of contents](#table-of-contents)
 - [Usage](#usage)
 	- [Example](#example)
 	- [Defining a grammar](#defining-a-grammar)
@@ -21,12 +22,13 @@ A simple, powerful parser for Lua with zero dependencies.
 - [Quick reference](#quick-reference)
 	- [Grammar](#grammar)
 	- [Literal](#literal)
+	- [Pattern](#pattern)
 	- [Parser](#parser)
 	- [Node](#node)
 - [Credits](#credits)
 - [License](#license)
-<!-- /TOC -->
 
+<!-- /TOC -->
 
 ## Usage
 In this section we'll start with a typical example, followed by an in-depth explanation for how to build your grammar from scratch.
