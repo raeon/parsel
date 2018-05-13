@@ -168,7 +168,10 @@ do
         return self
     end
 
-    function Node:flatten(type, into)
+    function Node:merge(type, into)
+        -- Merging combines nonterminal A with any child A's. Useful to reduce
+        -- left- or right-recursion parse trees to a single node.
+
         -- By default, if we are the root node, the flattened items
         -- are to be inserted into our children.
         local isRoot = not into
@@ -180,7 +183,7 @@ do
                 if child.type == type then
                     -- If the child needs to be flattened,
                     -- instruct it to store all data in this node.
-                    child:flatten(type, into)
+                    child:merge(type, into)
                 else
                     -- If the child ITSELF does not need to be flattened,
                     -- it is not certain that none of its children need
@@ -192,7 +195,7 @@ do
 
                     -- However, next, we instruct the child to flatten
                     -- without passing the 'into' parameter.
-                    child:flatten(type)
+                    child:merge(type)
                 end
             elseif type(child) == 'table' and child.type ~= type then
                 -- If it is a terminal symbol that does not need to be
@@ -205,6 +208,28 @@ do
             self.children = into
         end
 
+        return self
+    end
+
+    function Node:flatten(type)
+        -- Flattening is useful when you have a deep tree branch which only has
+        -- one path, e.g. A -> B -> C -> D -> x. When you do, you might want to
+        -- just delete the intermediary nonterminals to simplify the parse tree.
+        -- If you call flatten(C) you would get A -> B -> D -> x.
+
+        -- We might need to flatten ourself.
+        if self.type == type and #self.children == 1 then
+            local child = self.children[1]
+            if is(child, Node) then
+                return child:flatten(type)
+            end
+            return child
+        end
+
+        -- If we don't need to flatten ourself, flatten our children instead.
+        for i, child in ipairs(self.children) do
+            self.children[i] = child:flatten(type)
+        end
         return self
     end
 

@@ -148,14 +148,14 @@ if #results > 1 then
 end
 ```
 
-Now that we're sure there is only *one* abstract syntax tree, let's find out what it looks like:
+Now that we're sure there is only *one* parse tree, let's find out what it looks like:
 ```lua
-local ast = results[1]
-print(ast)
+local tree = results[1]
+print(tree)
 ```
 
 If you run this code, the output looks like this:
-```lua
+```
 sequence(number(45), sequence(number(33), sequence(number(94), sequence(number(1), sequence(number(145), sequence(identifier(hello)))))))
 ```
 
@@ -174,19 +174,19 @@ This may appear somewhat nonsensical, so here it is in tree form:
                            "hello"
 ```
 
-**Note:** `parsel` does not come with functionality to let you print fancy trees like this one, but you could always write that yourself. :-)
+**Note:** `parsel` does not come with functionality to let you print fancy trees like this one, but you could always write it yourself. :-)
 
-### Flattening
+### Merging
 
-As expected, the resulting parse tree has the right-recursion we embedded in our grammar. However, in our case, we didn't actually *want* a right-recursive parse tree, we merely wanted to have a sequence of `number`s followed by a single `identifier`.
+For this section, we'll continue using our example from before. As expected, the resulting parse tree has the right-recursion we embedded in our grammar. However, in our case, we didn't actually *want* a right-recursive parse tree, we merely wanted to have a sequence of `number`s followed by a single `identifier`.
 
-Luckily for us, `parsel` has just the tools we need! We can simply tell the AST to *flatten* the `sequence` symbol like so:
+Luckily for us, `parsel` has just the tools we need! We can simply tell the parse tree to *merge* the `sequence` nonterminal like so:
 ```lua
-ast:flatten('sequence')
+tree:merge('sequence')
 ```
 
-If we now print the AST again, we get the following:
-```lua
+If we now print the parse tree again, we get the following:
+```
 sequence(number(45), number(33), number(94), number(1), number(145), identifier(hello))
 ```
 
@@ -197,24 +197,50 @@ Again, in tree form:
        /       /    \       \
    number  number  number  identifier
      |       |       |         |
-   "12"    "34"    "56"     "hello"
+   "12"    "34"     "56"     "hello"
 ```
 
 Neat! Now we no longer have to deal with recursion when we try to interpret `sequence` symbols.
 
+### Flattening
+
+In a real world scenario, it might occur that you have a grammar defined in such a way that it enforces operator precedence to be interpreted correctly. A parse tree produced by such a grammar may look like this:
+```
+            expression
+                |
+               sum
+                |
+             product
+                |
+              number
+                |
+               "52"
+```
+Note how in the above tree diagram there is merely one branch. This could happen if the input is simply a number that does not use any of the possible operators. In this scenario it may not be useful for us to see a `sum` or `product` during traversion when there is no addition/subtraction or multiplication/division happening. This is where `flatten()` comes to save the day.
+
+If we have the above parse tree stored in a variable called `tree`, we could do the following to remove the useless nonterminals we don't care about:
+```lua
+tree:flatten('sum')
+tree:flatten('product')
+```
+
+What this does is scan through the tree, and *replace* any node of the given type (in our case `sum` or `product`) with their only child. **This means that if the node has multiple children, it is kept intact.** It is only removed if it has only one child.
+
+**Note:** If the root node (the object on which you call the function) needs to be flattened as well, be sure use the **return value** of the call, like so: `tree = tree:flatten(type)`. It is however not recommended to flatten the root node since it may return a terminal symbol as the new root node, which may interfere with any traversion happening hereafter.
+
 ### Transforming
 
-For some use-cases, the AST returned by `parsel` is sufficient. However, a lot of times it just happens that we want to store more data and functions in the nodes of the parse tree. We could always just store more data (since everything in Lua is a table), but that becomes messy quickly and does not allow us to cleanly add methods. In such scenarios it may be useful to transform the nodes of the parse tree to another type.
+For some use-cases, the parse tree returned by `parsel` is sufficient. However, a lot of times it just happens that we want to store more data and functions in the nodes of the parse tree. We could always just store more data (since everything in Lua is a table), but that becomes messy quickly and does not allow us to cleanly add methods. In such scenarios it may be useful to transform the nodes of the parse tree to another type.
 
 An excellent example of this is converting the `number` nodes to *actual numbers*, since they are just strings for now. We can do this by writing a *transformation function*: a function that that takes a `number` node and returns a real number. Let's write this function and apply it straight away:
 ```lua
-ast:transform('number', function(node)
+tree:transform('number', function(node)
     return tonumber(node.children[1].value)
 end)
 ```
 **Whoa- hold on there.** This seems illogical. You might be wondering why we didn't do the following:
 ```lua
-ast:transform('number', function(node)
+tree:transform('number', function(node)
     return tonumber(node.value)
 end)
 ```
@@ -226,12 +252,10 @@ g:define('number', parsel.Pattern('[0-9]+'))
 
 **We defined `number` as a nonterminal.** This means that `number` is merely a wrapper for the terminal symbol `Pattern('[0-9]+')`. This is why we grab the *first child* from the container, which is the `Pattern`, and convert it's `value` field to a number.
 
-**Note:** Since we apply this transformation to the root node, **all** occurrences of `number` are replaced with the result of the transformation function.
-
-**Note:** If the node on which you invoke `transform` needs to be transformed itself, then the result of the method call is the result of that transformation.
+**Note:** If the root node (the object on which you call the function) needs to be transformed as well, be sure use the **return value** of the call, like so: `tree = tree:transform(...)`.
 
 After the transformation, we get the following AST:
-```lua
+```
 sequence(12, 34, 56, identifier(hello))
 ```
 
