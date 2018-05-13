@@ -298,7 +298,7 @@ end)
 
 The reason for this is actually quite simple. If we look back at our definition of `number`, we see the following:
 ```lua
-g:define('number', parsel.Pattern('[0-9]+'))
+g:define('number', pattern '[0-9]+')
 ```
 
 **We defined `number` as a nonterminal.** This means that `number` is merely a wrapper for the terminal symbol `Pattern('[0-9]+')`. This is why we grab the *first child* from the container, which is the `Pattern`, and convert it's `value` field to a number.
