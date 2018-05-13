@@ -156,56 +156,61 @@ do
     function Node:strip(type)
         -- Remove all nodes with type 'type' from this tree.
         -- Note: This includes tokens.
-        for i, child in pairs(self.children) do
-            if child.type == type then
-                self.children[i] = nil
-            end
+        local child
+        for i=#self.children,1,-1 do
+            child = self.children[i]
             if is(child, Node) then
-                child:strip(type)
+                if child.type == type then
+                    table.remove(self.children, i)
+                else
+                    child:strip(type)
+                end
             end
         end
 
         return self
     end
 
-    function Node:merge(type, into)
+    function Node:merge(type, into, index)
         -- Merging combines nonterminal A with any child A's. Useful to reduce
         -- left- or right-recursion parse trees to a single node.
 
-        -- By default, if we are the root node, the flattened items
-        -- are to be inserted into our children.
-        local isRoot = not into
-        into = into or {}
-
-        -- We go over all our children.
-        for i, child in ipairs(self.children) do
-            if is(child, Node) then
-                if child.type == type then
-                    -- If the child needs to be flattened,
-                    -- instruct it to store all data in this node.
-                    child:merge(type, into)
-                else
-                    -- If the child ITSELF does not need to be flattened,
-                    -- it is not certain that none of its children need
-                    -- to be flattened.
-
-                    -- We store this item in the result set since we're
-                    -- certain that it itself does not need to be flattened.
-                    table.insert(into, child)
-
-                    -- However, next, we instruct the child to flatten
-                    -- without passing the 'into' parameter.
-                    child:merge(type)
-                end
-            elseif type(child) == 'table' and child.type ~= type then
-                -- If it is a terminal symbol that does not need to be
-                -- flattened, insert it into the result set.
-                table.insert(into, child)
+        -- If we're not relevant, just recurse.
+        if self.type ~= type then
+            for _, child in ipairs(self.children) do
+                child:merge(type)
             end
+            return
         end
 
-        if isRoot then
-            self.children = into
+        -- We go over all our children. We use a while loop here since
+        -- we want to move backwards in some scenarios.
+        local i = 1
+        local child
+        while i <= #self.children do
+            child = self.children[i]
+
+            if into then
+                -- If we are NOT the root node, flat out insert
+                -- everything we get into the root node's children,
+                -- but AFTER the current index.
+                index = index + 1
+                table.insert(into, index, child)
+            else
+                -- If we ARE the root node, we call merge on every child,
+                -- telling them to throw their children into ours, provided
+                -- that they are of the correct type. If they aren't,
+                -- the merge call is just propagated.
+                if is(child, Node) then
+                    if child.type == type then
+                        table.remove(self.children, i)
+                        i = i - 1
+                    end
+                    child:merge(type, self.children, i)
+                end
+            end
+
+            i = i + 1
         end
 
         return self
@@ -236,12 +241,9 @@ do
     function Node:transform(type, func)
         -- Transform all nodes in this tree with type 'type' using
         -- the given transformation function.
-        self.children = map(self.children, function(_, child)
-            if is(child, Node) then
-                return child:transform(type, func)
-            end
-            return child
-        end)
+        for i, child in ipairs(self.children) do
+            self.children[i] = is(child, Node) and child:transform(type, func) or child
+        end
 
         -- Also substitute ourselves if necessary.
         return self.type == type and func(self) or self
@@ -252,9 +254,11 @@ do
     end
 
     function Node:__tostring()
-        return self.value or 'node(' .. self.type .. ', ' .. table.concat(map(self.children, function(_, child)
-            return tostring(child)
-        end), ', ') .. ')'
+        return self.value
+            and '"' .. self.value .. '"'
+            or self.type .. '(' .. table.concat(map(self.children, function(_, child)
+                return tostring(child)
+            end), ', ') .. ')'
     end
 
     class(Node)
