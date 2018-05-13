@@ -57,11 +57,11 @@ local ast = results[1]
 print('Raw AST:', ast)
 
 -- Flattening
-ast:flatten('sum-operator')
-ast:flatten('product-operator')
-ast:flatten('number')
+ast:flatten('sum')
+ast:flatten('product')
+ast:flatten('factor')
 
--- Stripping
+-- Stripping unused symbols
 ast:strip('lparen')
 ast:strip('rparen')
 
@@ -260,6 +260,22 @@ sequence(12, 34, 56, identifier(hello))
 ```
 
 Nice and simple!
+
+### Stripping
+
+In grammars, it may occur that there are some terminal symbols that are used merely for disambiguation. An example of this is if we were to parse, for example, a function call `func(arg1, arg2, arg2, ..., argN)` we don't need to remember the left/right parenthesis or the commas. For cases like this, we can strip the symbols from the parse tree:
+```lua
+g:define('lparen', literal '(')
+g:define('lparen', literal ')')
+g:define('comma', literal ',')
+
+...
+
+tree:strip('lparen')
+tree:strip('rparen')
+tree:strip('comma')
+```
+Now we're certain all symbols we encounter
 
 # Credits
 - [Loup Vaillant](http://loup-vaillant.fr) for his excellent guide to [Earley parsing](http://loup-vaillant.fr/tutorials/earley-parsing/);
