@@ -15,8 +15,8 @@ A simple, powerful parser for Lua with zero dependencies.
 	- [Parsing](#parsing)
 	- [Error handling](#error-handling)
 	- [Result manipulation](#result-manipulation)
-		- [Merging](#merging)
 		- [Flattening](#flattening)
+		- [Shortening](#shortening)
 		- [Transforming](#transforming)
 		- [Stripping](#stripping)
 - [Quick reference](#quick-reference)
@@ -97,15 +97,15 @@ tree:strip('lparen')
 tree:strip('rparen')
 
 -- Simplifying the parse tree
-tree:flatten('sum-op')
-tree:flatten('sum') -- replaces "sum" matches with "product"
-tree:flatten('product-op')
-tree:flatten('product')
-tree:flatten('factor') -- replaces factor with either the "sum" or the "number"
+tree:shorten('sum-op')
+tree:shorten('sum') -- replaces "sum" matches with "product"
+tree:shorten('product-op')
+tree:shorten('product')
+tree:shorten('factor') -- replaces factor with either the "sum" or the "number"
 
-tree:merge('sum')
-tree:merge('product')
-tree:merge('factor')
+tree:flatten('sum')
+tree:flatten('product')
+tree:flatten('factor')
 
 -- Transforming the parse tree
 tree:transform('number', function(node)
@@ -229,13 +229,13 @@ This may appear somewhat nonsensical, so here it is in tree form:
 
 **Note:** `parsel` does not come with functionality to let you print fancy trees like this one, but you could always write it yourself. :-)
 
-#### Merging
+#### Flattening
 
 For this section, we'll continue using our example from before. As expected, the resulting parse tree has the right-recursion we embedded in our grammar. However, in our case, we didn't actually *want* a right-recursive parse tree, we merely wanted to have a sequence of `number`s followed by a single `identifier`.
 
-Luckily for us, `parsel` has just the tools we need! We can simply tell the parse tree to *merge* all `sequence` nonterminals like so:
+Luckily for us, `parsel` has just the tools we need! We can simply tell the parse tree to *flatten* all `sequence` nonterminals like so:
 ```lua
-tree:merge('sequence')
+tree:flatten('sequence')
 ```
 
 If we now print the parse tree again, we get the following:
@@ -255,7 +255,7 @@ Again, in tree form:
 
 Neat! Now we no longer have to deal with recursion when we try to interpret `sequence` symbols.
 
-#### Flattening
+#### Shortening
 In a real-world scenario, it might occur that you have a grammar defined in such a way that it enforces operator precedence to be interpreted correctly. A parse tree produced by such a grammar may look like this:
 ```
             expression
@@ -268,17 +268,17 @@ In a real-world scenario, it might occur that you have a grammar defined in such
                 |
                "52"
 ```
-Note how in the above tree diagram there is merely one branch. This could happen if the input is simply a number that does not use any of the possible operators. In this scenario it may not be useful for us to see a `sum` or `product` during traversion when there is no addition/subtraction or multiplication/division happening. This is where `flatten()` comes to save the day.
+Note how in the above tree diagram there is merely one branch. This could happen if the input is simply a number that does not use any of the possible operators. In this scenario it may not be useful for us to see a `sum` or `product` during traversion when there is no addition/subtraction or multiplication/division happening. This is where `shorten()` comes to save the day.
 
 If we have the above parse tree stored in a variable called `tree`, we could do the following to remove the useless nonterminals we don't care about:
 ```lua
-tree:flatten('sum')
-tree:flatten('product')
+tree:shorten('sum')
+tree:shorten('product')
 ```
 
 What this does is scan through the tree, and *replace* any node of the given type (in our case `sum` or `product`) with their only child. **This means that if the node has multiple children, it is kept intact.** It is only removed if it has only one child.
 
-**Note:** If the root node (the object on which you call the function) needs to be flattened as well, be sure use the **return value** of the call, like so: `tree = tree:flatten(type)`. It is however not recommended to flatten the root node since it may return a terminal symbol as the new root node, which may interfere with any traversion happening hereafter.
+**Note:** If the root node (the object on which you call the function) needs to be shortened as well, be sure use the **return value** of the call, like so: `tree = tree:shorten(type)`. It is however not recommended to shorten the root node since it may return a terminal symbol as the new root node, which may interfere with any traversion happening hereafter.
 
 #### Transforming
 For some use-cases, the parse tree returned by `parsel` is sufficient. However, a lot of times it just happens that we want to store more data and functions in the nodes of the parse tree. We could always just store more data (since everything in Lua is a table), but that becomes messy quickly and does not allow us to cleanly add methods. In such scenarios it may be useful to transform the nodes of the parse tree to another type.

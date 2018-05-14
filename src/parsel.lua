@@ -171,14 +171,14 @@ do
         return self
     end
 
-    function Node:merge(type, into, index)
-        -- Merging combines nonterminal A with any child A's. Useful to reduce
+    function Node:flatten(type, into, index)
+        -- Flatten combines nonterminal A with any child A's. Useful to reduce
         -- left- or right-recursion parse trees to a single node.
 
         -- If we're not relevant, just recurse.
         if self.type ~= type then
             for _, child in ipairs(self.children) do
-                child:merge(type)
+                child:flatten(type)
             end
             return
         end
@@ -197,16 +197,16 @@ do
                 index = index + 1
                 table.insert(into, index, child)
             else
-                -- If we ARE the root node, we call merge on every child,
+                -- If we ARE the root node, we call flatten on every child,
                 -- telling them to throw their children into ours, provided
                 -- that they are of the correct type. If they aren't,
-                -- the merge call is just propagated.
+                -- the funtion call is just propagated.
                 if is(child, Node) then
                     if child.type == type then
                         table.remove(self.children, i)
                         i = i - 1
                     end
-                    child:merge(type, self.children, i)
+                    child:flatten(type, self.children, i)
                 end
             end
 
@@ -216,24 +216,24 @@ do
         return self
     end
 
-    function Node:flatten(type)
-        -- Flattening is useful when you have a deep tree branch which only has
+    function Node:shorten(type)
+        -- Shortening is useful when you have a deep tree branch which only has
         -- one path, e.g. A -> B -> C -> D -> x. When you do, you might want to
         -- just delete the intermediary nonterminals to simplify the parse tree.
-        -- If you call flatten(C) you would get A -> B -> D -> x.
+        -- If you call shorten(C) you would get A -> B -> D -> x.
 
-        -- We might need to flatten ourself.
+        -- We might need to shorten ourself.
         if self.type == type and #self.children == 1 then
             local child = self.children[1]
             if is(child, Node) then
-                return child:flatten(type)
+                return child:shorten(type)
             end
             return child
         end
 
-        -- If we don't need to flatten ourself, flatten our children instead.
+        -- If we don't need to shorten ourself, shorten our children instead.
         for i, child in ipairs(self.children) do
-            self.children[i] = child:flatten(type)
+            self.children[i] = child:shorten(type)
         end
         return self
     end
