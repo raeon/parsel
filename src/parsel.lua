@@ -253,6 +253,15 @@ do
         return self.value ~= nil
     end
 
+    function Node:string()
+        if self.value then return self.value end
+        local str = ''
+        for _, child in ipairs(self.children) do
+            str = str .. child:string()
+        end
+        return str
+    end
+
     function Node:__tostring()
         return self.value
             and '"' .. self.value .. '"'

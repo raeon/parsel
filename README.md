@@ -357,6 +357,7 @@ Internal methods are not shown here for the sake of being a *quick* reference.
 - `node:merge(type)` merges nodes of type `type` into their parent if their parent is also of type `type`.
 - `node:flatten(type)` for all nodes of type `type`, if they have exactly one child, the node is replaced with their child.
 - `node:transform(type, fn)` replaces all nodes of type `type` with the result of `fn(node)`.
+- `node:string()` returns the literal value for this node and it's children
 - `node:isTerminal()` whether this is a terminal symbol or not
 - `tostring(node)` converts this node to a string representation
 
