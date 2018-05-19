@@ -89,7 +89,7 @@ do
     end
 
     local function is(inst, cls)
-        return inst.__class and inst.__class == cls
+        return type(inst) == 'table' and inst.__class and inst.__class == cls
     end
 
     --[[
