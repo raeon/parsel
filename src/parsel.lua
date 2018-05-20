@@ -548,7 +548,7 @@ do
 
         -- Move forward on success
         if bestToken then
-            self.index = self.index + #bestToken.value
+            self.index = self.index + bestLen
         end
 
         -- Return whatever the result is

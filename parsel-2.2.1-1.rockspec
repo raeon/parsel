@@ -1,8 +1,8 @@
 package = "parsel"
-version = "2.2.0-2"
+version = "2.2.1-1"
 source = {
     url = "git+https://github.com/raeon/parsel.git",
-    tag = "v2.2.0-2"
+    tag = "v2.2.1-1"
 }
 description = {
     summary = "A simple, powerful parser for Lua with zero dependencies.",
