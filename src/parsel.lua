@@ -105,7 +105,7 @@ do
 
     function Literal:__call(input, index)
         if input:sub(index, index + #self.value - 1) == self.value then
-            return self.value
+            return self.value, #self.value
         end
     end
 
@@ -130,7 +130,8 @@ do
         input = input:sub(index)
         local first, last = input:find(self.value)
         if first == 1 then
-            return input:sub(first, last)
+            local match = input:match(self.value)
+            return match, last - first + 1
         end
     end
 
@@ -527,13 +528,20 @@ do
         -- Otherwise, find the best token
         local position = self:position()
         local bestToken = nil
+        local bestLen = nil
         local bestPrio = nil
         for _, terminal in pairs(self.terminals) do
-            if (not bestPrio) or terminal.priority > bestPrio then
-                local token = terminal(self.input, self.index)
+            -- Either we have no match, or this has a higehr or equal priority.
+            -- In any other case we don't even try.
+            if (not bestPrio) or (terminal.priority >= bestPrio) then
+                local token, len = terminal(self.input, self.index)
                 if token then
-                    bestToken = Node(terminal, token, position, nil)
-                    bestPrio = terminal.priority
+                    -- Check if this match is actually an improvement.
+                    if (not bestLen) or (len > bestLen) then
+                        bestToken = Node(terminal, token, position, nil)
+                        bestLen = len
+                        bestPrio = terminal.priority
+                    end
                 end
             end
         end
