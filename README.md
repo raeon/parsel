@@ -16,7 +16,11 @@ A simple, powerful parser for Lua with zero dependencies.
 	- [Error handling](#error-handling)
 	- [Result manipulation](#result-manipulation)
 		- [Flattening](#flattening)
+		- [Dissolving](#dissolving)
+			- [Targeting type](#targeting-type)
+			- [Targeting child types](#targeting-child-types)
 		- [Shortening](#shortening)
+		- [Terminating](#terminating)
 		- [Transforming](#transforming)
 		- [Stripping](#stripping)
 - [Quick reference](#quick-reference)
@@ -96,16 +100,14 @@ local tree = results[1]
 tree:strip('lparen')
 tree:strip('rparen')
 
+-- Remove unneeded intermediary nonterminals from the parse tree
+tree:dissolve('sum-op')
+tree:dissolve('product-op')
+
 -- Simplifying the parse tree
-tree:shorten('sum-op')
 tree:shorten('sum') -- replaces "sum" matches with "product"
-tree:shorten('product-op')
 tree:shorten('product')
 tree:shorten('factor') -- replaces factor with either the "sum" or the "number"
-
-tree:flatten('sum')
-tree:flatten('product')
-tree:flatten('factor')
 
 -- Transforming the parse tree
 tree:transform('number', function(node)
@@ -118,7 +120,7 @@ print(tree)
 
 Running this example code yields the following output:
 ```
-sum(1, "+", product(2, "*", sum(3, "-", 4, "+", 5)))
+sum(1, "+", product(2, "*", sum(3, "-", sum(4, "+", 5))))
 ```
 
 ### Defining a grammar
@@ -191,7 +193,7 @@ Error: unexpected end of file at line 1 char 15:
 ```
 
 ### Result manipulation
-Since we're working with an Earley parser, we get back every possible interpretation of the given input. This means that if your grammar is ambigious, you will get all possible results back! Typically this is not what you want, so you can either ignore all results past the first one, or ensure that your grammar is not ambiguous.
+Since we're working with an Earley parser, we get back every possible interpretation of the given input. This means that if your grammar is ambiguous, you will get all possible results back! Typically this is not what you want, so you can either ignore all results past the first one, or ensure that your grammar is not ambiguous.
 
 So, what is this `results` object we got back? It's just a table of abstract syntax trees! Let's check for ambiguity and error if we have multiple results:
 ```lua
@@ -255,7 +257,65 @@ Again, in tree form:
 
 Neat! Now we no longer have to deal with recursion when we try to interpret `sequence` symbols.
 
+#### Dissolving
+It might occur that you have intermediate nonterminal nodes that you do not care for. This can be the case if they are necessary merely for the correctness of your grammar. In this case you can *dissolve* these nodes.
+
+**Note:** You cannot dissolve the root node.
+
+Let's use the following tree as an example:
+```
+              root
+                |
+            container
+              /    \
+           split    box
+           /   \     |
+         box   box  end
+          |     |
+         end   end
+```
+
+There are **two** ways to use the `dissolve()` function.
+
+##### Targeting type
+Let's say we want to dissolve all the `box` nodes. We can do this as such:
+```lua
+tree:dissolve('box')
+```
+
+Doing this will yield the following tree:
+```
+              root
+                |
+            container
+              /    \
+           split   end
+           /   \
+         end   end  
+```
+
+##### Targeting child types
+Let's say we don't want to dissolve _all_ `box` nodes, but just the ones that are under the `split` node. In this case we can specify the parent and child types of the nodes we want to dissolve, for example:
+```lua
+-- There are two ways to dissolve using child type(s):
+tree:dissolve('split', 'box') -- using a single child type
+tree:dissolve('split', {'box', ...}) -- using multiple child types at once
+```
+
+This will dissolve the `box` only when it is child to the `split` node, which means the `box` node under the `container` node remains intact. This will yield the following tree:
+```
+              root
+                |
+            container
+              /    \
+           split    box
+           /   \     |
+         end   end  end
+```
+
 #### Shortening
+Similar to `dissolve()`, but will only dissolve a node if it has exactly *one* child node. This can be useful if you want to dissolve nodes only if they (visibly) give you no additional information.
+
 In a real-world scenario, it might occur that you have a grammar defined in such a way that it enforces operator precedence to be interpreted correctly. A parse tree produced by such a grammar may look like this:
 ```
             expression
@@ -268,7 +328,7 @@ In a real-world scenario, it might occur that you have a grammar defined in such
                 |
                "52"
 ```
-Note how in the above tree diagram there is merely one branch. This could happen if the input is simply a number that does not use any of the possible operators. In this scenario it may not be useful for us to see a `sum` or `product` during traversion when there is no addition/subtraction or multiplication/division happening. This is where `shorten()` comes to save the day.
+Note how in the above tree diagram there is merely one branch. This could happen if the input is simply a number that does not use any of the possible operators. In this scenario it may not be useful for us to see a `sum` or `product` during traversal when there is no addition/subtraction or multiplication/division happening. This is where `shorten()` comes to save the day.
 
 If we have the above parse tree stored in a variable called `tree`, we could do the following to remove the useless nonterminals we don't care about:
 ```lua
@@ -278,7 +338,60 @@ tree:shorten('product')
 
 What this does is scan through the tree, and *replace* any node of the given type (in our case `sum` or `product`) with their only child. **This means that if the node has multiple children, it is kept intact.** It is only removed if it has only one child.
 
-**Note:** If the root node (the object on which you call the function) needs to be shortened as well, be sure use the **return value** of the call, like so: `tree = tree:shorten(type)`. It is however not recommended to shorten the root node since it may return a terminal symbol as the new root node, which may interfere with any traversion happening hereafter.
+**Note:** If the root node (the object on which you call the function) needs to be shortened as well, be sure use the **return value** of the call, like so: `tree = tree:shorten(type)`. It is however not recommended to shorten the root node since it may return a terminal symbol as the new root node, which may interfere with any traversal happening hereafter.
+
+#### Terminating
+For convenience, instead of having to do `node.children[1].value` you can `terminate()` a node at a given type. This will take the value from the nodes' children and set the `value` field of the nodes up until the given type.
+
+Let's assume we have the following tree:
+```
+        root   <-- no '.value'
+         |
+       value   <-- no '.value'
+         |
+       number  <-- no '.value'
+         |
+        '4'    <-- '.value' of '4'
+```
+
+If we want to be able to fetch the `value` field from the `number` or `value` node without having to go down to the `'4'` node itself, we can simply terminate the chain at the `value` node like so:
+```lua
+tree:terminate('value')
+```
+
+This will copy the `value` from the lowest levels of the tree upwards, resulting in the following tree:
+```
+        root   <-- no '.value'
+         |
+       value   <-- '.value' of '4'
+         |
+       number  <-- '.value' of '4'
+         |
+        '4'    <-- '.value' of '4'
+```
+
+You might be wondering what happens if there are several terminal nodes under the nonterminal node that we are terminating. Consider the following example:
+```
+            sentence
+       _____/ |  | \_____
+      /      /    \      \
+    word   word   word   word
+      |      |     |       |
+   'this'  'is'   'a'  'sentence'     
+```
+
+In such a case the default behaviour is for all child values to be concatenated. Terminating the `sentence` node would therefore yield a `value` of `thisisasentence`. This may be undesirable, so it is possible to provide either a string that will be placed between all parts, or to provide a function that will deal with the concatenation:
+```
+-- terminate using a string
+tree:terminate('sentence', ' ')
+
+-- terminate using a concatenation function
+tree:terminate('sentence', function(left, right)
+    return left .. ' ' .. right
+end)
+```
+
+Both of these options would cause the `sentence` node to end with a `value` of `this is a sentence`.
 
 #### Transforming
 For some use-cases, the parse tree returned by `parsel` is sufficient. However, a lot of times it just happens that we want to store more data and functions in the nodes of the parse tree. We could always just store more data (since everything in Lua is a table), but that becomes messy quickly and does not allow us to cleanly add methods. In such scenarios it may be useful to transform the nodes of the parse tree to another type.

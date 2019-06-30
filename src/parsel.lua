@@ -5,6 +5,7 @@ do
     ]]
 
     local concat = table.concat
+    local typeof = type
 
     local function map(tbl, fn)
         local t = {}
@@ -109,6 +110,13 @@ do
         end
     end
 
+    function Literal:__eq(other)
+        if is(self, Literal) and is(other, Literal) then
+            return self.value == other.value and self.priority == other.priority
+        end
+        return false
+    end
+
     function Literal:__tostring()
         return format('\'{0}\'', self.value)
     end
@@ -135,6 +143,13 @@ do
         end
     end
 
+    function Pattern:__eq(other)
+        if is(self, Pattern) and is(other, Pattern) then
+            return self.value == other.value and self.priority == other.priority
+        end
+        return false
+    end
+
     function Pattern:__tostring()
         return format('/{0}/', self.value)
     end
@@ -149,7 +164,7 @@ do
 
     function Node:new(type, value, position, children)
         self.type = type
-        self.value = value -- only set for terminals
+        self.value = value
         self.position = position
         self.children = children or {}
     end
@@ -168,7 +183,6 @@ do
                 end
             end
         end
-
         return self
     end
 
@@ -213,7 +227,52 @@ do
 
             i = i + 1
         end
+        return self
+    end
 
+    function Node:dissolve(parentType, childTypes)
+        -- Dissolves any child nodes with the given type, making the children take the nodes place.
+        -- If 'subtypes' is set, it means that 'type' is the parent type. In this case the behaviour
+        -- of this function changes to dissolve all 'subtypes' that are under the parent type.
+
+        -- Ensure that subtypes is a table or nil.
+        if childTypes and (type(childTypes) ~= 'table') then
+            childTypes = { childTypes }
+        end
+
+        -- Check our children for nodes of the type.
+        local i = 1
+        local child
+        while i <= #self.children do
+
+            -- Grab the child.
+            local child = self.children[i]
+
+            -- If this child needs to be dissolved, do that now.
+            if is(child, Node) then
+
+                -- Recurse first!
+                child:dissolve(parentType, childTypes)
+
+                -- Check if this child needs to be dissolved.
+                -- In 'type'-only mode, we dissolve the child if it is of type 'type'.
+                -- In 'subtype'-mode, we dissolve the child if *we* are of type 'type'
+                -- and the child is of a type in the 'subtypes'.
+                if ((not childTypes) and (parentType == child.type))
+                or (childTypes and parentType == self.type and contains(childTypes, child.type)) then
+                    -- Remove the child.
+                    table.remove(self.children, i)
+                    i = i - 1
+
+                    -- Insert all of the childs' children.
+                    for j=1,#child.children,1 do
+                        table.insert(self.children, i + j, child.children[j])
+                    end
+                end
+            end
+
+            i = i + 1
+        end
         return self
     end
 
@@ -250,8 +309,47 @@ do
         return self.type == type and func(self) or self
     end
 
+    function Node:terminate(targetType, filler)
+        -- Sets the 'value' field of a node by concatenating its' childrens' values.
+
+        -- Perform ONLY on our children if it's not relevant for us.
+        if self.type ~= targetType then
+            for i=1,#self.children,1 do
+                self.children[i]:terminate(targetType)
+            end
+            return
+        end
+
+        -- It IS relevant; perform on children and concatenate.
+        local str = ''
+        local child
+        for i=1,#self.children,1 do
+            child = self.children[i]
+
+            -- Still perform on our child! The values could be nested several
+            -- nodes deeper than the current level.
+            child:terminate(targetType)
+
+            -- Join the values directly or using the filler if provided.
+            if i > i then
+                if type(filler) == 'function' then
+                    str = filler(str, child.value)
+                elseif type(filler) == 'string' then
+                    str = str .. filler .. child.value
+                else
+                    error('second argument to terminate must be function or string')
+                end
+            else
+                str = str .. child.value
+            end
+        end
+        self.value = str
+
+        return self
+    end
+
     function Node:isTerminal()
-        return self.value ~= nil
+        return type(self.type) ~= 'string'
     end
 
     function Node:string()
@@ -264,9 +362,20 @@ do
     end
 
     function Node:__tostring()
-        return self.value
-            and '"' .. self.value .. '"'
-            or self.type .. '(' .. table.concat(map(self.children, function(_, child)
+        -- If we're a real terminal, return the literal value.
+        if self:isTerminal() then
+            return '"' .. self.value .. '"'
+        end
+
+        -- If we are nonterminal, but we do have a value, it means
+        -- we were :terminate()d. Return the value.
+        if self.value then
+            return self.type .. '("' .. self.value .. '")'
+        end
+
+        -- If we are nonterminal and unterminated, join the children.
+        return self.type .. '(' ..
+            table.concat(map(self.children, function(_, child)
                 return tostring(child)
             end), ', ') .. ')'
     end
@@ -363,7 +472,8 @@ do
             table.insert(data, current.data)
             current = current.left
         until not (current and current.data)
-        return Node(self.rule.name, nil, position,  reverse(data))
+
+        return Node(self.rule.name, nil, position, reverse(data))
     end
 
     function Item:isLast()
@@ -537,13 +647,18 @@ do
                 local token, len = terminal(self.input, self.index)
                 if token then
                     -- Check if this match is actually an improvement.
-                    if (not bestLen) or (len > bestLen) then
-                        bestToken = Node(terminal, token, position, nil)
+                    if (not bestLen) or (len > bestLen) or (terminal.priority >= bestPrio) then
+                        bestToken = Node(terminal, token, position, nil) -- type, value, position
                         bestLen = len
                         bestPrio = terminal.priority
                     end
                 end
             end
+        end
+
+        -- Return no token if we didn't actually match any characters.
+        if bestLen and bestLen <= 0 then
+            bestToken = nil
         end
 
         -- Move forward on success
@@ -576,7 +691,7 @@ do
         if self.current then index = index - #self.current.value end
 
         -- Everything we have visited
-        local seen = self.input:gsub(1, index - 1)
+        local seen = self.input:sub(1, index - 1)
 
         -- From the begin of the input to the current index,
         -- how many newlines are encountered?
@@ -643,7 +758,7 @@ do
         -- Do some error checking
         if token then
             -- If there is a token remaining, it was unexpected.
-            return nil, self:error('unexpected token ' .. token.value, lexer)
+            return nil, self:error('unexpected token "' .. token.value .. '"', lexer)
         elseif not lexer:isDone() then
             -- If there is NOT a token remaining but the lexer is also not done,
             -- then we must've encountered an unrecognized character.
