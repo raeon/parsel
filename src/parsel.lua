@@ -309,13 +309,15 @@ do
         return self.type == type and func(self) or self
     end
 
-    function Node:terminate(targetType, filler)
+    function Node:terminate(targetType, filler, here)
         -- Sets the 'value' field of a node by concatenating its' childrens' values.
 
-        -- Perform ONLY on our children if it's not relevant for us.
-        if self.type ~= targetType then
+        -- If we already have a 'value' field set, we only propagate.
+        -- Otherwise, we propagate only when we are not already a (distant) child
+        -- of the target type, indicated by the 'here' parameter.
+        if self.value or ((not here) and self.type ~= targetType) then
             for i=1,#self.children,1 do
-                self.children[i]:terminate(targetType)
+                self.children[i]:terminate(targetType, filler, here)
             end
             return
         end
@@ -328,10 +330,10 @@ do
 
             -- Still perform on our child! The values could be nested several
             -- nodes deeper than the current level.
-            child:terminate(targetType)
+            child:terminate(targetType, filler, true)
 
             -- Join the values directly or using the filler if provided.
-            if i > i then
+            if i > 1 then
                 if type(filler) == 'function' then
                     str = filler(str, child.value)
                 elseif type(filler) == 'string' then
