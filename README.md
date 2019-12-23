@@ -127,22 +127,52 @@ sum(1, "+", product(2, "*", sum(3, "-", sum(4, "+", 5))))
 Defining your own grammar is easy! Just create a new `Grammar` object like so:
 ```lua
 local parsel = require('parsel')
-local grammar, literal, pattern = parsel.Grammar, parsel.Literal, parsel.Pattern
+local grammar = parsel.Grammar
+local literal = parsel.Literal
+local pattern = parsel.Pattern
+local consumer = parsel.Consumer
 
 local g = grammar()
 ```
 From here on out we will define symbols.
 
 #### Terminals
-Using this grammar object you can start defining your terminal and nonterminal symbols. Currently, there are two types of terminal symbols available for use: the `Literal` and the `Pattern`. As the names suggest, the `Literal` is an exact match of the string you pass it. The `Pattern` only matches the Lua pattern you give it, which is particularly useful when you want to match numbers (`[0-9]+`) or identifiers (`[a-zA-Z]+`). This looks like so (continuing from the previous snippet):
+Using this grammar object you can start defining your terminal and nonterminal symbols. Currently, there are three types of terminal symbols available for use: the `Literal`, the `Pattern` and the `Consumer`. As the names suggest, the `Literal` is an exact match of the string you pass it. The `Pattern` only matches the Lua pattern you give it, which is particularly useful when you want to match numbers (`[0-9]+`) or identifiers (`[a-zA-Z]+`). This looks like so (continuing from the previous snippet):
 ```lua
 g:define('number', pattern '[0-9]+')
 g:define('identifier', pattern '[a-zA-Z]+')
 ```
 **Note:** The `pattern '[0-9]+'` is a function call using an alternative syntax supported by Lua. It is syntactically equivalent to calling the function normally, like so: `pattern('[0-9]+')`.
 
+Lastly, the `Consumer` can be used in cases where input validation requirements are higher than the `Pattern` can accommodate. An example of this may be back-referencing existing capture groups, which is a feature that Lua patterns do not provide. If you want to, for example, parse an array of characters with an increasing value, you could do that as such:
+```lua
+g:define('increasing', consumer('increasing', function(input, index)
+    local pos = index
+    local last = nil
+
+    while true do
+        if pos > #input then break end
+
+        local char = input:sub(pos, pos)
+        print('char:', char)
+        if (not last) or (char:byte() >= last:byte()) then
+            pos = pos + 1
+            last = char
+        else
+            break
+        end
+    end
+
+    if not last then
+        return nil, nil
+    else
+        return input:sub(index, pos), pos - index
+    end
+end))
+```
+
 ##### Priorities
-Sometimes, you have multiple tokens in your grammar that are ambiguous. For example, in many programming languages you have the `>`, the `>=` and the `=` operator. `parsel` works by first tokenizing the input using all defined terminals. However, as you might have deduced already, it is possible for the tokenizer to misinterpret a `>=` as both a `>` and a `=` token. This is clearly undesirable! For this reason, you can pass another argument to the `Literal` or `Parser` functions: the priority. By default, the priority is `0`. For this example we would want to assign a higher priority to the `>=` operator, which could be done like this:
+Sometimes, you have multiple tokens in your grammar that are ambiguous. For example, in many programming languages you have the `>`, the `>=` and the `=` operator. `parsel` works by first tokenizing the input using all defined terminals. However, as you might have deduced already, it is possible for the tokenizer to misinterpret a `>=` as both a `>` and a `=` token. This is clearly undesirable! For this reason, you can pass another argument to the `Literal`, `Parser` or `Consumer` functions: the priority. By default, the priority is `0`. For this example we would want to assign a higher priority to the `>=` operator, which could be done like this:
 ```lua
 g:define('greater', literal '>')
 g:define('greater-or-equal', literal('>=', 500))
@@ -160,7 +190,7 @@ g:define('sequence', 'identifier')
 What we've done here is define the nonterminal `sequence` with two possible ways to get there: If we encounter a `number` it will parse it and then try to parse another `sequence`. If it encounters an `identifier`, it will immediately finish parsing the current `sequence`. This allows you to parse multiple of the same token in a sequence.
 
 #### Ignored terminals
-Sometimes we want to flat-out ignore some `Literal` or `Pattern`. In our example, we wish to allow an arbitrary amount of whitespace between symbols. We accomplish this like so:
+Sometimes we want to flat-out ignore some `Literal`, `Pattern` or `Consumer`. In our example, we wish to allow an arbitrary amount of whitespace between symbols. We accomplish this like so:
 ```lua
 g:ignore(pattern '%s+')
 ```
@@ -457,6 +487,10 @@ Internal methods are not shown here for the sake of being a *quick* reference.
 ### Pattern
 - `Pattern(value[, priority])` constructs a new pattern terminal symbol that parses the Lua pattern `value` with priority `priority` (default: 0)
 - `tostring(pattern)` the `value` string passed during construction
+
+### Consumer
+- `Consumer(name, func[, priority])` constructs a new consumer terminal symbol that uses the given function to tokenize the input, with priority `priority` (default: 0)
+- `tostring(consumer)` the `name` string passed during construction
 
 ### Parser
 - `parser(input[, index])` parses `input`, optionally starting at index `index`. returns a list of root nodes and an error string.

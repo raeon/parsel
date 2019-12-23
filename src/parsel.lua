@@ -157,14 +157,44 @@ do
     class(Pattern)
 
     --[[
+        CONSUMER
+    ]]
+
+    local Consumer = {}
+
+    function Consumer:new(name, func, priority)
+        self.name = name
+        self.func = func
+        self.priority = priority or 0
+    end
+
+    function Consumer:__call(input, index)
+        return self.func(input, index)
+    end
+
+    function Consumer:__eq(other)
+        if is(self, Consumer) and is(other, Consumer) then
+            return self.func == other.func
+        end
+        return false
+    end
+
+    function Consumer:__tostring()
+        return format('consumer({0})', self.name)
+    end
+
+    class(Consumer)
+
+    --[[
         NODE
     ]]
 
     local Node = {}
 
-    function Node:new(type, value, position, children)
+    function Node:new(type, value, length, position, children)
         self.type = type
         self.value = value
+        self.length = length
         self.position = position
         self.children = children or {}
     end
@@ -469,13 +499,15 @@ do
         local data = {}
         local current = self
         local position
+        local length = 0
         repeat
             position = current.position
             table.insert(data, current.data)
+            length = length + current.data.length
             current = current.left
         until not (current and current.data)
 
-        return Node(self.rule.name, nil, position, reverse(data))
+        return Node(self.rule.name, nil, length, position, reverse(data))
     end
 
     function Item:isLast()
@@ -649,8 +681,8 @@ do
                 local token, len = terminal(self.input, self.index)
                 if token then
                     -- Check if this match is actually an improvement.
-                    if (not bestLen) or (len > bestLen) or (terminal.priority >= bestPrio) then
-                        bestToken = Node(terminal, token, position, nil) -- type, value, position
+                    if (not bestLen) or (len > bestLen) or (terminal.priority > bestPrio) then
+                        bestToken = Node(terminal, token, len, position, nil) -- type, value, position
                         bestLen = len
                         bestPrio = terminal.priority
                     end
@@ -690,7 +722,7 @@ do
 
     function Lexer:stats()
         local index = self.index
-        if self.current then index = index - #self.current.value end
+        if self.current then index = index - self.current.length end
 
         -- Everything we have visited
         local seen = self.input:sub(1, index - 1)
@@ -822,7 +854,7 @@ do
 
         -- Store any new terminals
         for _, symbol in pairs(symbols) do
-            if is(symbol, Literal) or is(symbol, Pattern) then
+            if is(symbol, Literal) or is(symbol, Pattern) or is(symbol, Consumer) then
                 if not contains(self.terminals, symbol) then
                     table.insert(self.terminals, symbol)
                 end
@@ -831,7 +863,8 @@ do
     end
 
     function Grammar:ignore(terminal)
-        assert(is(terminal, Literal) or is(terminal, Pattern), 'can only ignore terminal symbols')
+        assert(is(terminal, Literal) or is(terminal, Pattern) or is(terminal, Consumer),
+            'can only ignore terminal symbols')
         terminal.priority = -1
         table.insert(self.terminals, terminal)
     end
@@ -852,6 +885,7 @@ do
         Grammar = Grammar,
         Literal = Literal,
         Pattern = Pattern,
+        Consumer = Consumer,
     }
 
 end
