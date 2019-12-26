@@ -3,10 +3,6 @@ do
     --[[
         UTILITIES
     ]]
-
-    local concat = table.concat
-    local typeof = type
-
     local function map(tbl, fn)
         local t = {}
         for k,v in pairs(tbl) do
@@ -431,7 +427,7 @@ do
     end
 
     function Rule:__tostring(index)
-        return self.name .. ' → ' .. concat(times(#self.symbols + 1, function(i)
+        return self.name .. ' → ' .. table.concat(times(#self.symbols + 1, function(i)
             if i == index then
                 return i, '● ' .. tostring(self.symbols[i] or '')
             end
